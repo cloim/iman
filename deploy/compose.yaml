@@ -45,37 +45,5 @@ services:
     volumes:
       - ./secrets:/run/secrets/iman:ro
 
-  # 매일 03:30 pg_dump, 14일 보관. 복원: pg_restore --clean -d iman <파일>
-  backup:
-    image: postgres:17
-    container_name: iman-backup
-    restart: unless-stopped
-    network_mode: host
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      PGPASSWORD: ${POSTGRES_PASSWORD}
-      TZ: Asia/Seoul
-    volumes:
-      - ${BACKUP_DIR:-./backups}:/backups
-    entrypoint:
-      - sh
-      - -c
-      - |
-        while true; do
-          if [ "$$(date +%H%M)" = "0330" ] || [ ! -f /backups/.initial ]; then
-            f=/backups/iman-$$(date +%Y%m%d-%H%M).dump
-            if pg_dump -h 127.0.0.1 -p 47200 -U iman -Fc iman > "$$f.tmp"; then
-              mv "$$f.tmp" "$$f" && touch /backups/.initial
-            else
-              rm -f "$$f.tmp"
-            fi
-            find /backups -name 'iman-*.dump' -mtime +14 -delete
-            sleep 61
-          fi
-          sleep 30
-        done
-
 volumes:
   iman_pgdata:

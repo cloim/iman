@@ -17,7 +17,7 @@
 | `apps/web/android` | Capacitor 안드로이드. 수집기, 동기화, 위젯, 넛지, 업데이터는 `app/src/main/java/com/cloimism/iman` |
 | `db/migrations` | 스키마, `range_agg` 집계 함수, RLS |
 | `fixtures/intervals` | TS, Kotlin, SQL 공용 골든 케이스 |
-| `deploy` | 로컬 도커 엔진용 compose(Postgres, API, 백업) |
+| `deploy` | 로컬 도커 엔진용 compose(Postgres, API) |
 
 ## 개발
 
@@ -41,8 +41,7 @@ docker compose -f compose.yaml up -d --build
 
 - `deploy/.env`에 비밀값(DB 비밀번호, JWT, `GOOGLE_WEB_CLIENT_ID`)을 두고, FCM 서비스 계정은 `deploy/secrets/fcm-service-account.json`에 둡니다.
 - API는 `127.0.0.1:47210`, Postgres는 `127.0.0.1:47200`. 외부 공개는 Cloudflare Tunnel(`iman.example.com`)만 사용합니다.
-- 로컬 도커 엔진의 브리지 네트워크는 외부 연결과 컨테이너 간 연결이 막혀 있어 API와 백업 컨테이너는 호스트 네트워크를 씁니다.
-- 백업: 매일 03:30 `deploy/backups`(또는 `BACKUP_DIR`)에 `pg_dump`, 14일 보관. 복원은 `pg_restore --clean -d iman <파일>`.
+- 로컬 도커 엔진의 브리지 네트워크는 외부 연결과 컨테이너 간 연결이 막혀 있어 API 컨테이너는 호스트 네트워크를 씁니다.
 
 ## 안드로이드 릴리스
 
