@@ -8,7 +8,7 @@
     "build": "tsc -p . && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p .",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "cap:sync": "vite build && cap sync android"
   },
   "dependencies": {
