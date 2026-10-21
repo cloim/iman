@@ -159,6 +159,7 @@ function BoardView({ dashboardId }: { dashboardId: string }) {
             size="lg"
             showHours={d?.layout.showRibbon ?? true}
             pauseParticipants={board.data.pause?.participants}
+            baselineMin={board.data.group.baselineMin}
           />
         )}
 

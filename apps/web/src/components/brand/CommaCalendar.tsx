@@ -24,12 +24,14 @@ export function CommaCalendar({
   today,
   selected,
   onSelect,
+  baselineMin = BASELINE_MIN,
 }: {
   month: string
   days: Record<string, CalendarDay>
   today: string
   selected?: string
   onSelect?: (date: string) => void
+  baselineMin?: number
 }) {
   const [y, m] = parseLocalDate(`${month}-01`)
   const first = `${month}-01`
@@ -53,7 +55,7 @@ export function CommaCalendar({
         const info = days[d]
         const future = d > today
         const empty = !info || future || info.actualMs === 0
-        const ratio = info ? info.actualMs / ((info.targetMin ?? BASELINE_MIN) * 60_000) : 0
+        const ratio = info ? info.actualMs / ((info.targetMin ?? baselineMin) * 60_000) : 0
         const scale = info ? 0.55 + 0.45 * Math.sqrt(info.actualMs / max) : 0.55
         const linkLeft = i % 7 !== 0 && metStreak(d) && metStreak(cells[i - 1] ?? null)
         const linkRight = i % 7 !== 6 && metStreak(d) && metStreak(cells[i + 1] ?? null)

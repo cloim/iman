@@ -27,7 +27,7 @@ export function Hero({
 }) {
   const daily = t.goals.find((g) => g.type === 'daily_actual' && g.active && g.activeToday)
   const status: CommaStatus = daily ? daily.evaluation.status : 'none'
-  const targetMin = daily?.target ?? BASELINE_MIN
+  const targetMin = daily?.target ?? (t.baselineMin ?? BASELINE_MIN)
   const ratio = t.actualMs / (targetMin * 60_000)
   const value = metric === 'actual' ? t.actualMs : t.totalMs
   const remain = daily ? daily.target * 60_000 - t.actualMs : null

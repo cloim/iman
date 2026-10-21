@@ -121,6 +121,7 @@ export default function GroupPage() {
             members={board.data.members}
             metric={metric}
             pauseParticipants={board.data.pause?.participants}
+            baselineMin={board.data.group.baselineMin}
           />
           <div className="card empty">
             <p>아직 혼자예요. 구성원을 초대해 함께 쉬어 볼까요?</p>
@@ -134,6 +135,7 @@ export default function GroupPage() {
           members={board.data.members}
           metric={metric}
           pauseParticipants={board.data.pause?.participants}
+          baselineMin={board.data.group.baselineMin}
         />
       )}
 

@@ -14,6 +14,7 @@ export interface Me {
     ownerId: string
     role: Role
     myVisibility: Visibility
+    baselineMin: number
   }
 }
 
@@ -36,6 +37,7 @@ export interface GoalDto {
 
 export interface Today {
   date: string
+  baselineMin?: number
   timeZone: string
   dayStart: number
   dayEnd: number
@@ -89,7 +91,7 @@ export interface Dashboard {
 export interface Board {
   date: string
   timeZone: string
-  group: { id: string; name: string; emoji: string; visibility: Visibility }
+  group: { id: string; name: string; emoji: string; visibility: Visibility; baselineMin?: number }
   dashboard: null | {
     id: string
     name: string

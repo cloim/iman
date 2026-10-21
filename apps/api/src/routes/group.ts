@@ -50,7 +50,7 @@ export async function buildBoard(
   const data = await tx(ctx, async (c) => {
     const tz = await groupTimeZone(c, groupId)
     const day = date ?? localDateOf(Date.now(), tz)
-    const g = await c.query('select id, name, emoji, visibility from groups where id = $1', [groupId])
+    const g = await c.query('select id, name, emoji, visibility, baseline_min as "baselineMin" from groups where id = $1', [groupId])
     if (!g.rows[0]) throw new HttpError(404, 'not_found')
     const members = await c.query<{
       user_id: string
@@ -203,6 +203,7 @@ export default async function groupRoutes(app: FastifyInstance) {
         emoji: z.string().max(8).optional(),
         weekStart: z.number().int().min(0).max(6).optional(),
         visibility: VisibilityEnum.optional(),
+        baselineMin: z.number().int().min(30).max(1440).optional(),
       }),
       req.body,
     )
@@ -210,8 +211,9 @@ export default async function groupRoutes(app: FastifyInstance) {
       const m = await requireMember(c, ctx.userId, ['leader'])
       await c.query(
         `update groups set name = coalesce($2, name), emoji = coalesce($3, emoji),
-           week_start = coalesce($4, week_start), visibility = coalesce($5, visibility) where id = $1`,
-        [m.groupId, b.name ?? null, b.emoji ?? null, b.weekStart ?? null, b.visibility ?? null],
+           week_start = coalesce($4, week_start), visibility = coalesce($5, visibility),
+           baseline_min = coalesce($6, baseline_min) where id = $1`,
+        [m.groupId, b.name ?? null, b.emoji ?? null, b.weekStart ?? null, b.visibility ?? null, b.baselineMin ?? null],
       )
       return m.groupId
     })

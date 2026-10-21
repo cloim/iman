@@ -164,9 +164,15 @@ describe('그룹, 수집, 공개 수준, 키오스크', () => {
     expect((await member.call('POST', `/api/invites/${inv.body.code}/accept`)).status).toBe(200)
     expect((await member.call('POST', `/api/invites/${inv.body.code}/accept`)).body.error).toBe('already_in_group')
 
-    // 구성원은 그룹 설정, 공개 수준을 바꿀 수 없다
+    // 구성원은 그룹 설정, 공개 수준, 기본 기준시간을 바꿀 수 없다
     expect((await member.call('PATCH', '/api/group', { visibility: 'app' })).status).toBe(403)
+    expect((await member.call('PATCH', '/api/group', { baselineMin: 180 })).status).toBe(403)
     expect((await member.call('PATCH', `/api/group/members/${member.userId}`, { visibilityOverride: 'summary' })).status).toBe(403)
+
+    // 관리자가 기본 기준시간을 180분으로 변경하면 구성원에게도 반영된다
+    expect((await leader.call('PATCH', '/api/group', { baselineMin: 180 })).status).toBe(200)
+    const memberMeUpdated = await member.call('GET', '/api/me')
+    expect(memberMeUpdated.body.group.baselineMin).toBe(180)
 
     // 기기 등록과 세션 수집(분할 화면 겹침 + 진행 중 세션)
     const dev = await member.call('POST', '/api/devices', { installId: 'install-member-1', model: 'Galaxy' })
@@ -192,6 +198,7 @@ describe('그룹, 수집, 공개 수준, 키오스크', () => {
       sessions: [{ packageName: 'com.kakao.talk', startedAt: now - 2 * 60_000, endedAt: now - 1 * 60_000 }],
     })
     const today = await member.call('GET', '/api/me/today')
+    expect(today.body.baselineMin).toBe(180)
     expect(Math.round(today.body.totalMs / 60_000)).toBe(20 + 15 + 1)
     expect(Math.round(today.body.actualMs / 60_000)).toBe(25 + 1)
 

@@ -49,7 +49,7 @@ export default async function meRoutes(app: FastifyInstance) {
       let group = null
       if (m) {
         const g = await c.query(
-          `select id, name, emoji, visibility, week_start as "weekStart", owner_id as "ownerId" from groups where id = $1`,
+          `select id, name, emoji, visibility, week_start as "weekStart", owner_id as "ownerId", baseline_min as "baselineMin" from groups where id = $1`,
           [m.groupId],
         )
         group = { ...g.rows[0], role: m.role, myVisibility: await effectiveVisibilityOf(c, ctx.userId) }
@@ -275,6 +275,11 @@ export async function todayReport(c: Tx, userId: string, day?: string) {
   const sessions = await loadSessions(c, userId, from, to)
   const cats = await categoryMap(c, [...new Set(sessions.map((s) => s.packageName))])
   const s = summarize(sessions, { from, to, now }, (p) => cats.get(p) ?? 'other')
+  const grp = await c.query<{ baseline_min: number }>(
+    `select g.baseline_min from group_members gm join groups g on g.id = gm.group_id where gm.user_id = $1`,
+    [userId],
+  )
+  const baselineMin = grp.rows[0]?.baseline_min ?? 240
   const goals = await c.query(
     `select id, type, target, scope_ref, days_of_week, quiet_from, quiet_to, nudge from goals
      where user_id = $1 and active order by created_at`,
@@ -292,6 +297,7 @@ export async function todayReport(c: Tx, userId: string, day?: string) {
   )
   return {
     date,
+    baselineMin,
     timeZone: tz,
     dayStart: from,
     dayEnd: to,

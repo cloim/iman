@@ -104,7 +104,8 @@ object Widgets {
             }
             val actual = today.optLong("actualMs")
             val goals = today.optJSONArray("goals")
-            var target = 240L * 60_000
+            val baselineMin = today.optLong("baselineMin", 240L)
+            var target = baselineMin * 60_000
             var status = "met"
             var hasGoal = false
             for (i in 0 until (goals?.length() ?: 0)) {

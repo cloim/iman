@@ -1,3 +1,4 @@
+import { formatDuration } from '@iman/core'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
 import SelectControl from '../../components/SelectControl'
@@ -7,6 +8,24 @@ import { APP_LEVEL_NOTE, VISIBILITY_HINT, VISIBILITY_LABEL, type Visibility } fr
 
 const WEEK = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일']
 const EMOJIS = ['🌿', '🏡', '☕', '📚', '🌙', '🐾', '🌊', '🍀']
+const BASELINE_OPTIONS = [
+  { value: 60, label: '1시간' },
+  { value: 90, label: '1시간 30분' },
+  { value: 120, label: '2시간' },
+  { value: 150, label: '2시간 30분' },
+  { value: 180, label: '3시간' },
+  { value: 210, label: '3시간 30분' },
+  { value: 240, label: '4시간 (기본)' },
+  { value: 270, label: '4시간 30분' },
+  { value: 300, label: '5시간' },
+  { value: 330, label: '5시간 30분' },
+  { value: 360, label: '6시간' },
+  { value: 420, label: '7시간' },
+  { value: 480, label: '8시간' },
+  { value: 540, label: '9시간' },
+  { value: 600, label: '10시간' },
+  { value: 720, label: '12시간' },
+]
 
 /** 설정 > 그룹 탭의 관리자 전용 그룹 설정 */
 export function GroupSettings({ children }: { children?: ReactNode }) {
@@ -16,6 +35,7 @@ export function GroupSettings({ children }: { children?: ReactNode }) {
   const [name, setName] = useState('')
   const [emoji, setEmoji] = useState('🌿')
   const [weekStart, setWeekStart] = useState(0)
+  const [baselineMin, setBaselineMin] = useState(240)
   const [visibility, setVisibility] = useState<Visibility>('category')
   const [saved, setSaved] = useState(false)
 
@@ -24,11 +44,16 @@ export function GroupSettings({ children }: { children?: ReactNode }) {
     setName(g.name)
     setEmoji(g.emoji)
     setWeekStart(g.weekStart)
+    setBaselineMin(g.baselineMin ?? 240)
     setVisibility(g.visibility)
   }, [g])
 
+  const baselineChoices = BASELINE_OPTIONS.some((o) => o.value === baselineMin)
+    ? BASELINE_OPTIONS
+    : [...BASELINE_OPTIONS, { value: baselineMin, label: formatDuration(baselineMin * 60_000) }].sort((a, b) => a.value - b.value)
+
   const save = useMutation({
-    mutationFn: () => api('/api/group', { method: 'PATCH', body: { name, emoji, weekStart, visibility } }),
+    mutationFn: () => api('/api/group', { method: 'PATCH', body: { name, emoji, weekStart, visibility, baselineMin } }),
     onSuccess: () => {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -71,6 +96,17 @@ export function GroupSettings({ children }: { children?: ReactNode }) {
             ))}
           </SelectControl>
           <span className="text-[13px] text-ink-3">주간 쉼표 리포트가 이 요일 아침에 도착해요.</span>
+        </label>
+        <label className="field">
+          <span>기본 기준시간</span>
+          <SelectControl value={baselineMin} onChange={(e) => setBaselineMin(Number(e.target.value))}>
+            {baselineChoices.map((b) => (
+              <option key={b.value} value={b.value}>
+                {b.label}
+              </option>
+            ))}
+          </SelectControl>
+          <span className="text-[13px] text-ink-3">목표를 정하지 않은 구성원의 쉼표 채움 기준으로 쓰여요.</span>
         </label>
       </section>
 

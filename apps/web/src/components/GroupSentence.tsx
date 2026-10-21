@@ -45,12 +45,14 @@ export function GroupSentence({
   size = 'md',
   showHours = true,
   pauseParticipants = [],
+  baselineMin = BASELINE_MIN,
 }: {
   members: BoardMember[]
   metric: 'actual' | 'total'
   size?: 'md' | 'lg'
   showHours?: boolean
   pauseParticipants?: string[]
+  baselineMin?: number
 }) {
   const c = useChartColors()
   const lg = size === 'lg'
@@ -61,7 +63,7 @@ export function GroupSentence({
       aria-label="구성원 현황"
     >
       {members.map((m) => {
-        const target = (m.goal?.targetMin ?? BASELINE_MIN) * 60_000
+        const target = (m.goal?.targetMin ?? baselineMin) * 60_000
         const value = pick(m)
         const inPause = pauseParticipants.includes(m.userId)
         const live = m.activeNow && !inPause

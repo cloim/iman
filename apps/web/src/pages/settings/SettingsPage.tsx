@@ -1,3 +1,4 @@
+import { formatDuration } from '@iman/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Download, LogOut, Pencil, Smartphone } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -234,9 +235,15 @@ export default function SettingsPage() {
             <p className="text-[18px]">
               {group.emoji} {group.name}
             </p>
-            <div className="card card-tint p-[14px]">
-              <p className="font-bold">나에게 적용된 공개 수준: {VISIBILITY_LABEL[group.myVisibility]}</p>
-              <p className="text-[13px] text-ink-2">그룹에 {VISIBILITY_HINT[group.myVisibility]}이 보여요. 공개 수준은 관리자가 정해요.{group.myVisibility === 'app' && ` ${APP_LEVEL_NOTE}`}</p>
+            <div className="card card-tint grid gap-2 p-[14px]">
+              <div>
+                <p className="font-bold">나에게 적용된 공개 수준: {VISIBILITY_LABEL[group.myVisibility]}</p>
+                <p className="text-[13px] text-ink-2">그룹에 {VISIBILITY_HINT[group.myVisibility]}이 보여요. 공개 수준은 관리자가 정해요.{group.myVisibility === 'app' && ` ${APP_LEVEL_NOTE}`}</p>
+              </div>
+              <div className="border-t border-line/60 pt-2">
+                <p className="font-bold">기본 기준시간: {formatDuration((group.baselineMin ?? 240) * 60_000)}</p>
+                <p className="text-[13px] text-ink-2">하루 목표를 정하지 않았을 때 쉼표 게이지의 채움 기준이 돼요.</p>
+              </div>
             </div>
           </section>
           {isLeader ? (

@@ -391,6 +391,7 @@ export default function HistoryPage() {
             today={todayStr}
             selected={selected}
             onSelect={setSelected}
+            baselineMin={me.data?.group?.baselineMin}
           />
         )}
         <p className="text-[13px] text-ink-3 mt-2">
