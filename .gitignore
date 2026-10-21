@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.local/
+*.log
+.env
+.env.*
+!.env.example
+coverage/
+.worktrees/
+
+# Android
+apps/web/android/.gradle/
+apps/web/android/build/
+apps/web/android/app/build/
+apps/web/android/local.properties
+apps/web/android/app/google-services.json
+*.jks
+*.keystore
+
+# Local development documents
+docs/

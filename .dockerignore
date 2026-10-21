@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+apps/web/android
+.local
+.git
+.worktrees
+deploy
+docs
+**/.env*
