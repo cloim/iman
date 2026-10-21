@@ -1,6 +1,6 @@
 import { addDays, localDateOf, localDatesBetween, localParts, weekdayOf } from '@iman/core'
 import type { FastifyBaseLogger } from 'fastify'
-import { tx } from './db'
+import { lockUsers, tx } from './db'
 import { env } from './env'
 import { ensurePartitions } from './migrate'
 import { membership } from './membership'
@@ -31,6 +31,7 @@ async function closeStaleSessions(log: FastifyBaseLogger) {
       touched.set(row.user_id, t)
     }
     const events: { groupId: string | undefined; userId: string; date: string }[] = []
+    await lockUsers(c, [...touched.keys()])
     for (const [userId, t] of touched) {
       const groupId = (await membership(c, userId))?.groupId
       for (const d of t.dates) {

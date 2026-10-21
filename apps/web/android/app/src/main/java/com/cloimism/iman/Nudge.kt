@@ -58,6 +58,9 @@ object Nudge {
         val apps = today.optJSONObject("apps") ?: JSONObject()
         val goals = today.optJSONArray("goals") ?: return
         val active = today.optBoolean("activeNow")
+        // 관리자가 정한 예외 앱은 서버 집계에서 빠져 있고, 기기에서 따로 보는 판정에서도 뺀다
+        val excluded = today.optJSONArray("excludedPackages")
+            ?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet()
         var predictAt = Long.MAX_VALUE
 
         fun send(key: String, text: String) {
@@ -78,6 +81,8 @@ object Nudge {
             val limit = ev.getDouble("limit").toLong()
             val id = g.getString("id")
             val ref = g.optString("scopeRef")
+            // 한도 0분인 예외 앱 목표가 0 >= 0 으로 알림을 내지 않도록 건너뛴다
+            if (g.getString("type") == "app_limit" && ref in excluded) continue
             when (g.getString("type")) {
                 "daily_actual" -> {
                     if (status == "over" || value >= limit) {
@@ -108,9 +113,7 @@ object Nudge {
 
         // 60분 연속 사용
         val now = System.currentTimeMillis()
-        val local = UsageDb.get(ctx).between(now - 6 * 3_600_000L, now)
-            .mapNotNull { Intervals.clip(it.start, it.end, now - 6 * 3_600_000L, now, now) }
-        val block = Intervals.union(local).lastOrNull()
+        val block = lastBlock(UsageDb.get(ctx).between(now - 6 * 3_600_000L, now), excluded, now - 6 * 3_600_000L, now)
         if (block != null && now - block.end < 60_000 && block.end - block.start >= CONTINUOUS_MS) {
             send("continuous:${block.start}", "한 시간째 쓰고 있어요. 눈 좀 쉬어 볼까요?")
         }
@@ -124,6 +127,10 @@ object Nudge {
             )
         }
     }
+
+    /** 예외 앱을 뺀 사용 구간의 마지막 덩어리(연속 사용 판정용) */
+    fun lastBlock(sessions: List<LocalSession>, excluded: Set<String>, from: Long, now: Long): Intervals.Span? =
+        Intervals.union(sessions.filter { it.pkg !in excluded }.mapNotNull { Intervals.clip(it.start, it.end, from, now, now) }).lastOrNull()
 
     fun post(ctx: Context, text: String) {
         val n = Notifications.builder(ctx, Notifications.NUDGE, text)

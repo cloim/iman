@@ -40,6 +40,11 @@ export function useGroupEvents(enabled: boolean, token?: string | null, onEvent?
           void qc.invalidateQueries({ queryKey: ['board'] })
           void qc.invalidateQueries({ queryKey: ['dashboard'] })
         }
+        // 관리자가 예외 앱을 바꾸면 내 정보와 오늘 집계도 달라진다
+        if (type === 'members') {
+          void qc.invalidateQueries({ queryKey: ['me'] })
+          void qc.invalidateQueries({ queryKey: ['today'] })
+        }
         onEvent?.(type, data)
       }
       for (const t of ['rollup', 'members', 'pause', 'kiosk_revoked']) es.addEventListener(t, handle(t))

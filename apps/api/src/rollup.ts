@@ -31,11 +31,13 @@ export const toGoal = (g: GoalRow): Goal => ({
   quietTo: g.quiet_to,
 })
 
+/** 집계용 세션. 관리자가 정한 예외 앱은 원본에 남기고 여기서 뺀다 */
 export async function loadSessions(c: Tx, userId: string, from: number, to: number): Promise<UsageSession[]> {
   const r = await c.query<{ device_id: string; package_name: string; started_at: Date; ended_at: Date | null }>(
     `select device_id, package_name, started_at, ended_at
      from usage_sessions
-     where user_id = $1 and span && tstzrange($2, $3) and started_at < $3`,
+     where user_id = $1 and span && tstzrange($2, $3) and started_at < $3
+       and not (package_name = any (excluded_packages_of($1)))`,
     [userId, new Date(from), new Date(to)],
   )
   return r.rows.map((s) => ({
@@ -75,14 +77,16 @@ export async function refreshRollup(c: Tx, userId: string, timeZone: string, dat
     [userId, date, s.totalMs, s.actualMs, s.pickups, compact(s.byApp), compact(s.byCategory), compact(s.byDevice), byHour],
   )
 
-  const goals = await c.query<GoalRow>(
-    `select id, type, target, scope_ref, days_of_week, quiet_from, quiet_to
-     from goals where user_id = $1 and active`,
-    [userId],
+  // 꺼 둔 목표도 이미 판정이 있는 날은 다시 판정한다(예외 앱 변경을 과거 결과에도 반영)
+  const goals = await c.query<GoalRow & { active: boolean }>(
+    `select id, type, target, scope_ref, days_of_week, quiet_from, quiet_to, active
+     from goals g where user_id = $1
+       and (active or exists (select 1 from goal_results r where r.goal_id = g.id and r.local_date = $2))`,
+    [userId, date],
   )
   for (const row of goals.rows) {
     const goal = toGoal(row)
-    if (!isGoalActiveOn(goal, date)) continue
+    if (row.active && !isGoalActiveOn(goal, date)) continue
     const ev = evaluateGoal(goal, s, date, timeZone)
     await c.query(
       `insert into goal_results (goal_id, local_date, status, value) values ($1, $2, $3, $4)
@@ -91,4 +95,30 @@ export async function refreshRollup(c: Tx, userId: string, timeZone: string, dat
     )
   }
   return s
+}
+
+export async function excludedPackagesOf(c: Tx, userId: string): Promise<string[]> {
+  return (await c.query<{ p: string[] }>('select excluded_packages_of($1) as p', [userId])).rows[0]!.p
+}
+
+/**
+ * 예외 앱 적용 대상이 바뀐 사용자들의 모든 날짜를 원본 세션에서 다시 집계한다.
+ * 원본이 걸친 날, 이미 집계나 목표 판정이 있는 날을 모두 덮어써서 이전 정책 값이 남지 않게 한다.
+ * 호출하는 쪽이 lockUsers 로 대상 사용자를 잠근 트랜잭션(시스템 컨텍스트) 안에서 부른다
+ */
+export async function refreshAllRollups(c: Tx, userIds: string[]) {
+  const now = Date.now()
+  for (const userId of userIds) {
+    const tz = (await c.query<{ timezone: string }>('select timezone from users where id = $1', [userId])).rows[0]?.timezone ?? 'Asia/Seoul'
+    const dates = await c.query<{ d: string }>(
+      `select distinct generate_series((started_at at time zone $2::text)::date,
+                                       (coalesce(ended_at, now()) at time zone $2::text)::date,
+                                       interval '1 day')::date::text as d
+       from usage_sessions where user_id = $1
+       union select local_date::text from daily_rollups where user_id = $1
+       union select r.local_date::text from goal_results r join goals g on g.id = r.goal_id where g.user_id = $1`,
+      [userId, tz],
+    )
+    for (const { d } of dates.rows) await refreshRollup(c, userId, tz, d, now)
+  }
 }

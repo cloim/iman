@@ -1,6 +1,7 @@
 import { formatDuration } from '@iman/core'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
+import { ExcludedAppsEditor } from '../../components/ExcludedAppsEditor'
 import SelectControl from '../../components/SelectControl'
 import { api, errorText } from '../../lib/api'
 import { useMe } from '../../lib/queries'
@@ -37,6 +38,8 @@ export function GroupSettings({ children }: { children?: ReactNode }) {
   const [weekStart, setWeekStart] = useState(0)
   const [baselineMin, setBaselineMin] = useState(240)
   const [visibility, setVisibility] = useState<Visibility>('category')
+  const [excluded, setExcluded] = useState<string[]>([])
+  const [labels, setLabels] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
@@ -46,6 +49,8 @@ export function GroupSettings({ children }: { children?: ReactNode }) {
     setWeekStart(g.weekStart)
     setBaselineMin(g.baselineMin ?? 240)
     setVisibility(g.visibility)
+    setExcluded(g.excludedPackages ?? [])
+    setLabels(g.appLabels ?? {})
   }, [g])
 
   const baselineChoices = BASELINE_OPTIONS.some((o) => o.value === baselineMin)
@@ -53,12 +58,13 @@ export function GroupSettings({ children }: { children?: ReactNode }) {
     : [...BASELINE_OPTIONS, { value: baselineMin, label: formatDuration(baselineMin * 60_000) }].sort((a, b) => a.value - b.value)
 
   const save = useMutation({
-    mutationFn: () => api('/api/group', { method: 'PATCH', body: { name, emoji, weekStart, visibility, baselineMin } }),
+    mutationFn: () =>
+      api('/api/group', { method: 'PATCH', body: { name, emoji, weekStart, visibility, baselineMin, excludedPackages: excluded } }),
     onSuccess: () => {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
-      void qc.invalidateQueries({ queryKey: ['me'] })
-      void qc.invalidateQueries({ queryKey: ['board'] })
+      // 예외 앱이 바뀌면 오늘, 기록, 보드 집계가 모두 달라진다
+      void qc.invalidateQueries()
     },
   })
 
@@ -123,6 +129,22 @@ export function GroupSettings({ children }: { children?: ReactNode }) {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="card grid gap-4">
+        <h2 className="text-lg">예외 앱</h2>
+        <p className="-mt-2 text-[13px] text-ink-3">
+          모든 구성원의 사용시간, 목표, 알림에서 빠져요. 지난 기록에도 적용되고, 목록에서 빼면 원래대로 돌아와요. 특정 구성원에게만 더할 앱은 구성원 화면에서 정해요.
+        </p>
+        <ExcludedAppsEditor
+          label="그룹 공통 예외 앱"
+          value={excluded}
+          labels={labels}
+          onChange={(next, l) => {
+            setExcluded(next)
+            setLabels(l)
+          }}
+        />
       </section>
 
       {save.error && <p className="text-[13px] text-over-ink">{errorText(save.error)}</p>}

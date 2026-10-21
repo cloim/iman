@@ -2,7 +2,7 @@ import { localDateOf } from '@iman/core'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { requireUser } from '../auth'
-import { tx } from '../db'
+import { lockUsers, tx } from '../db'
 import { HttpError, parse } from '../http'
 import { userTimeZone } from '../membership'
 import { refreshRollup } from '../rollup'
@@ -42,6 +42,7 @@ export default async function goalRoutes(app: FastifyInstance) {
 
   // 목표 변경 후 오늘 결과를 바로 다시 판정
   const refreshToday = async (c: Parameters<Parameters<typeof tx>[1]>[0], userId: string) => {
+    await lockUsers(c, [userId])
     const tz = await userTimeZone(c, userId)
     await refreshRollup(c, userId, tz, localDateOf(Date.now(), tz))
   }

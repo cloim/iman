@@ -19,13 +19,13 @@ import { tx, type Tx } from '../db'
 import { HttpError, parse } from '../http'
 import { effectiveVisibilityOf } from './group'
 import { membership, userTimeZone } from '../membership'
-import { categoryMap, loadSessions, toGoal } from '../rollup'
+import { categoryMap, excludedPackagesOf, loadSessions, toGoal } from '../rollup'
 
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const Ms = z.coerce.number().int().nonnegative()
 const MAX_RANGE_MS = 93 * 86_400_000
 
-async function appLabels(c: Tx, packages: string[]) {
+export async function appLabels(c: Tx, packages: string[]) {
   if (packages.length === 0) return {}
   const r = await c.query<{ package_name: string; label: string; category: string }>(
     'select package_name, label, category from apps where package_name = any($1)',
@@ -49,10 +49,20 @@ export default async function meRoutes(app: FastifyInstance) {
       let group = null
       if (m) {
         const g = await c.query(
-          `select id, name, emoji, visibility, week_start as "weekStart", owner_id as "ownerId", baseline_min as "baselineMin" from groups where id = $1`,
+          `select id, name, emoji, visibility, week_start as "weekStart", owner_id as "ownerId", baseline_min as "baselineMin",
+                  excluded_packages as "excludedPackages" from groups where id = $1`,
           [m.groupId],
         )
-        group = { ...g.rows[0], role: m.role, myVisibility: await effectiveVisibilityOf(c, ctx.userId) }
+        const mine = await c.query<{ p: string[] }>('select excluded_packages as p from group_members where user_id = $1', [ctx.userId])
+        const myExcludedPackages = mine.rows[0]?.p ?? []
+        const labels = await appLabels(c, [...g.rows[0].excludedPackages, ...myExcludedPackages])
+        group = {
+          ...g.rows[0],
+          role: m.role,
+          myVisibility: await effectiveVisibilityOf(c, ctx.userId),
+          myExcludedPackages,
+          appLabels: Object.fromEntries(Object.entries(labels).map(([k, v]) => [k, v.label])),
+        }
       }
       return { user: u.rows[0], group }
     })
@@ -298,6 +308,8 @@ export async function todayReport(c: Tx, userId: string, day?: string) {
   return {
     date,
     baselineMin,
+    // 기기의 넛지(연속 사용, 앱 한도)도 같은 예외 앱을 빼도록 함께 보낸다
+    excludedPackages: await excludedPackagesOf(c, userId),
     timeZone: tz,
     dayStart: from,
     dayEnd: to,

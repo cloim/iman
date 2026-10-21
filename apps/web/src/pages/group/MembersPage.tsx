@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { Navigate } from 'react-router'
 import { BarActions, useAppBar } from '../../components/AppShell'
 import { DataGrid } from '../../components/DataGrid'
+import { ExcludedAppChips, ExcludedAppsEditor } from '../../components/ExcludedAppsEditor'
 import { InviteModal, type Invite } from '../../components/InviteModal'
 import { Modal } from '../../components/Modal'
 import SelectControl from '../../components/SelectControl'
@@ -16,6 +17,8 @@ interface Member {
   role: Role
   nickname: string | null
   visibilityOverride: Visibility | null
+  /** 이 구성원에게만 더한 예외 앱(관리자에게만 온다) */
+  excludedPackages: string[] | null
   displayName: string
   email: string
   avatarUrl: string | null
@@ -33,8 +36,12 @@ export default function MembersPage() {
   const [sharing, setSharing] = useState<Invite | null>(null)
   const [editing, setEditing] = useState<Member | null>(null)
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [labels, setLabels] = useState<Record<string, string>>({})
 
-  const members = useQuery({ queryKey: ['members'], queryFn: () => api<{ members: Member[] }>('/api/group/members') })
+  const members = useQuery({
+    queryKey: ['members'],
+    queryFn: () => api<{ members: Member[]; appLabels?: Record<string, string> }>('/api/group/members'),
+  })
   const invites = useQuery({ queryKey: ['invites'], queryFn: () => api<{ invites: Invite[] }>('/api/group/invites') })
   const group = me.data?.group
 
@@ -49,13 +56,14 @@ export default function MembersPage() {
         body: {
           nickname: m.nickname,
           visibilityOverride: m.visibilityOverride,
+          excludedPackages: m.excludedPackages ?? [],
           ...(m.userId !== me.data?.user.id && m.userId !== group?.ownerId ? { role: m.role } : {}),
         },
       }),
     onSuccess: () => {
       setEditing(null)
-      void qc.invalidateQueries({ queryKey: ['members'] })
-      void qc.invalidateQueries({ queryKey: ['board'] })
+      // 예외 앱이 바뀌면 구성원 내역과 보드, 내 기록(본인일 때) 집계가 달라진다
+      void qc.invalidateQueries()
     },
   })
   const removeMember = useMutation({
@@ -133,7 +141,10 @@ export default function MembersPage() {
           rowData={rows}
           columnDefs={columns}
           getRowId={(p: { data: Member }) => p.data.userId}
-          onRowClicked={(e: { data: Member }) => setEditing({ ...e.data })}
+          onRowClicked={(e: { data: Member }) => {
+            setLabels({ ...group?.appLabels, ...members.data?.appLabels })
+            setEditing({ ...e.data })
+          }}
           isLoading={members.isPending}
           errorMessage={members.error ? errorText(members.error) : ''}
           emptyMessage="아직 구성원이 없어요."
@@ -207,6 +218,26 @@ export default function MembersPage() {
                 </SelectControl>
                 <span className="text-[13px] text-ink-3">구성원에게는 적용된 공개 수준이 설정 화면에 표시돼요.</span>
               </label>
+            )}
+            {editing.role !== 'viewer' && (
+              <div className="grid gap-2.5">
+                {(group?.excludedPackages.length ?? 0) > 0 && (
+                  <div className="grid gap-1.5">
+                    <span className="text-[13px] font-semibold text-ink-2">그룹 공통 예외 앱</span>
+                    <ExcludedAppChips packages={group!.excludedPackages} labels={labels} />
+                  </div>
+                )}
+                <ExcludedAppsEditor
+                  label="이 구성원에게 더할 예외 앱"
+                  value={editing.excludedPackages ?? []}
+                  labels={labels}
+                  onChange={(next, l) => {
+                    setEditing({ ...editing, excludedPackages: next })
+                    setLabels(l)
+                  }}
+                />
+                <span className="text-[13px] text-ink-3">이 구성원의 사용시간, 목표, 알림에서 지난 기록까지 빠져요.</span>
+              </div>
             )}
             {saveMember.error && <p className="text-[13px] text-over-ink">{errorText(saveMember.error)}</p>}
           </div>

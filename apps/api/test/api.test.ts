@@ -147,6 +147,92 @@ describe('인증', () => {
   })
 })
 
+describe('예외 앱', () => {
+  it('공통과 구성원별 예외 앱을 과거 기록까지 집계에서 빼고, 풀리면 원래대로 돌아온다', async () => {
+    const leader = await login('ex-leader@test.dev')
+    const member = await login('ex-member@test.dev')
+    const YT = 'com.google.android.youtube'
+    const KT = 'com.kakao.talk'
+    await leader.call('POST', '/api/groups', { name: '예외' })
+    const inv = await leader.call('POST', '/api/group/invites', { role: 'member' })
+    await member.call('POST', `/api/invites/${inv.body.code}/accept`)
+
+    const dev = await member.call('POST', '/api/devices', { installId: 'install-ex-1', model: 'Galaxy' })
+    const now = Date.now()
+    // 며칠 전 서울 정오(03:00 UTC)에 시작해 자정을 넘지 않는 과거 세션
+    const d = new Date(now - 3 * 86_400_000)
+    const past = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 3)
+    await member.call('POST', '/api/sessions/ingest', {
+      deviceId: dev.body.id,
+      sentAt: now,
+      apps: [
+        { packageName: YT, label: 'YouTube', category: 'video' },
+        { packageName: KT, label: '카카오톡', category: 'social' },
+      ],
+      sessions: [
+        { packageName: YT, startedAt: now - 30 * 60_000, endedAt: now - 10 * 60_000 },
+        { packageName: KT, startedAt: now - 20 * 60_000, endedAt: now - 5 * 60_000 },
+        { packageName: YT, startedAt: past, endedAt: past + 60 * 60_000 },
+      ],
+    })
+    await member.call('POST', '/api/me/goals', { type: 'daily_actual', target: 20 })
+    const minutes = async () => {
+      const t = await member.call('GET', '/api/me/today')
+      const summary = await member.call('GET', `/api/me/summary?from=${t.body.dayStart}&to=${t.body.dayEnd}`)
+      const pastDate = new Date(past).toLocaleDateString('sv-SE', { timeZone: t.body.timeZone })
+      const days = await member.call('GET', `/api/me/days?from=${pastDate}&to=${t.body.date}`)
+      const byDate = Object.fromEntries(days.body.days.map((d: { date: string; actualMs: number }) => [d.date, d.actualMs / 60_000]))
+      const goal = days.body.goalResults.find((r: { date: string }) => r.date === t.body.date)
+      return {
+        today: Math.round(t.body.actualMs / 60_000),
+        total: Math.round(t.body.totalMs / 60_000),
+        summary: Math.round(summary.body.actualMs / 60_000),
+        past: Math.round(byDate[pastDate] ?? 0),
+        rollup: Math.round(byDate[t.body.date] ?? 0),
+        goal: goal?.status,
+        excluded: t.body.excludedPackages,
+      }
+    }
+    expect(await minutes()).toMatchObject({ today: 25, total: 35, summary: 25, past: 60, rollup: 25, goal: 'over', excluded: [] })
+
+    // 관리자만 바꾸고 앱을 찾을 수 있으며, 패키지 이름 형식을 확인한다
+    expect((await member.call('PATCH', '/api/group', { excludedPackages: [YT] })).status).toBe(403)
+    expect((await member.call('PATCH', `/api/group/members/${member.userId}`, { excludedPackages: [YT] })).status).toBe(403)
+    expect((await member.call('GET', '/api/group/app-catalog?q=You')).status).toBe(403)
+    expect((await leader.call('PATCH', '/api/group', { excludedPackages: ['not a package'] })).status).toBe(400)
+    const catalog = await leader.call('GET', '/api/group/app-catalog?q=You')
+    expect(catalog.body.apps).toContainEqual({ packageName: YT, label: 'YouTube' })
+
+    // 공통 예외: 겹친 구간을 빼고 다시 계산하며 과거 기록과 목표 판정에도 적용된다
+    expect((await leader.call('PATCH', '/api/group', { excludedPackages: [YT, YT] })).status).toBe(200)
+    expect(await minutes()).toMatchObject({ today: 15, total: 15, summary: 15, past: 0, rollup: 15, excluded: [YT] })
+    expect((await minutes()).goal).not.toBe('over')
+    const memberMe = await member.call('GET', '/api/me')
+    expect(memberMe.body.group).toMatchObject({ excludedPackages: [YT], myExcludedPackages: [], appLabels: { [YT]: 'YouTube' } })
+
+    // 구성원별 예외는 공통 목록에 더해 그 구성원에게만
+    expect((await leader.call('PATCH', `/api/group/members/${member.userId}`, { excludedPackages: [KT] })).status).toBe(200)
+    expect(await minutes()).toMatchObject({ today: 0, total: 0, past: 0, excluded: [YT, KT].sort() })
+    const board = await leader.call('GET', '/api/board')
+    const card = board.body.members.find((m: { userId: string }) => m.userId === member.userId)
+    expect(card).toMatchObject({ actualMs: 0, activeNow: false })
+    expect((await leader.call('GET', '/api/me/today')).body.excludedPackages).toEqual([YT])
+    const asLeader = await leader.call('GET', '/api/group/members')
+    expect(asLeader.body.members.find((m: { userId: string }) => m.userId === member.userId).excludedPackages).toEqual([KT])
+    expect(asLeader.body.appLabels[KT]).toBe('카카오톡')
+    const asMember = await member.call('GET', '/api/group/members')
+    expect(asMember.body.members.every((m: { excludedPackages: unknown }) => m.excludedPackages === null)).toBe(true)
+
+    // 예외를 풀면 원본에서 다시 계산한다
+    expect((await leader.call('PATCH', `/api/group/members/${member.userId}`, { excludedPackages: [] })).status).toBe(200)
+    expect(await minutes()).toMatchObject({ today: 15, past: 0 })
+
+    // 그룹을 나가면 그룹 예외도 풀린다
+    expect((await member.call('POST', '/api/group/leave')).status).toBe(200)
+    expect(await minutes()).toMatchObject({ today: 25, total: 35, past: 60, rollup: 25, goal: 'over', excluded: [] })
+  })
+})
+
 describe('그룹, 수집, 공개 수준, 키오스크', () => {
   it('전체 흐름', async () => {
     const leader = await login('leader@test.dev', '엄마')

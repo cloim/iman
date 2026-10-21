@@ -4,6 +4,7 @@ import { Check, Download, LogOut, Pencil, Smartphone } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { AppDownload } from '../../components/AppDownload'
+import { ExcludedAppChips } from '../../components/ExcludedAppsEditor'
 import { useAppBar } from '../../components/AppShell'
 import { Modal } from '../../components/Modal'
 import { api, errorText } from '../../lib/api'
@@ -159,6 +160,7 @@ export default function SettingsPage() {
   const isLeader = group?.role === 'leader'
   // 그룹 삭제는 그룹을 만든 사람만. 다른 관리자와 구성원은 그룹에서 나간다
   const isOwner = !!group && group.ownerId === me.data?.user.id
+  const myExcluded = [...new Set([...(group?.excludedPackages ?? []), ...(group?.myExcludedPackages ?? [])])].sort()
   const tabs: Tab[] = ['general']
   if (group) tabs.push('group')
   if (isLeader) tabs.push('dashboard')
@@ -244,6 +246,13 @@ export default function SettingsPage() {
                 <p className="font-bold">기본 기준시간: {formatDuration((group.baselineMin ?? 240) * 60_000)}</p>
                 <p className="text-[13px] text-ink-2">하루 목표를 정하지 않았을 때 쉼표 게이지의 채움 기준이 돼요.</p>
               </div>
+              {myExcluded.length > 0 && (
+                <div className="grid gap-1.5 border-t border-line/60 pt-2">
+                  <p className="font-bold">나에게 적용된 예외 앱</p>
+                  <ExcludedAppChips packages={myExcluded} labels={group.appLabels ?? {}} />
+                  <p className="text-[13px] text-ink-2">이 앱들은 사용시간, 목표, 알림에서 빠져요. 예외 앱은 관리자가 정해요.</p>
+                </div>
+              )}
             </div>
           </section>
           {isLeader ? (

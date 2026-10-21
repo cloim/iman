@@ -15,6 +15,12 @@ export interface Me {
     role: Role
     myVisibility: Visibility
     baselineMin: number
+    /** 그룹 공통 예외 앱 */
+    excludedPackages: string[]
+    /** 나에게만 더해진 예외 앱 */
+    myExcludedPackages: string[]
+    /** 위 두 목록의 앱 이름(카탈로그에 없는 패키지는 빠진다) */
+    appLabels: Record<string, string>
   }
 }
 
@@ -38,6 +44,8 @@ export interface GoalDto {
 export interface Today {
   date: string
   baselineMin?: number
+  /** 집계에서 뺀 예외 앱(그룹 공통과 나에게 더해진 목록의 합) */
+  excludedPackages?: string[]
   timeZone: string
   dayStart: number
   dayEnd: number

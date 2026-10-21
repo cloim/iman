@@ -15,6 +15,15 @@ export type DbContext =
   | { kind: 'kiosk'; dashboardId: string }
   | { kind: 'system' }
 
+/**
+ * 사용자 집계를 바꾸는 작업(수집, 예외 앱 변경, 목표 변경, 세션 마감)을 사용자 단위로 직렬화한다.
+ * 교착을 피하려고 항상 id 순서로 잡고, 트랜잭션이 끝나면 풀린다
+ */
+export async function lockUsers(c: Tx, userIds: string[]) {
+  for (const id of [...new Set(userIds)].sort())
+    await c.query(`select pg_advisory_xact_lock(hashtextextended('usage:' || $1, 0))`, [id])
+}
+
 /** RLS 컨텍스트를 지정한 트랜잭션 */
 export async function tx<T>(ctx: DbContext, fn: (c: Tx) => Promise<T>): Promise<T> {
   const c = await pool.connect()

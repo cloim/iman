@@ -2,7 +2,7 @@ import { localDatesBetween } from '@iman/core'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { requireUser } from '../auth'
-import { tx } from '../db'
+import { lockUsers, tx } from '../db'
 import { HttpError, parse } from '../http'
 import { membership, userTimeZone } from '../membership'
 import { publish } from '../realtime'
@@ -120,6 +120,7 @@ export default async function deviceRoutes(app: FastifyInstance) {
     const result = await tx(ctx, async (c) => {
       const dev = await c.query('select 1 from devices where id = $1 and user_id = $2', [b.deviceId, ctx.userId])
       if (!dev.rowCount) throw new HttpError(404, 'device_not_found')
+      await lockUsers(c, [ctx.userId])
 
       if (b.apps.length) {
         await c.query(

@@ -3,7 +3,7 @@ import { dayRange, localDateOf } from '@iman/core'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomToken, requireUser, requireViewer, sha256 } from '../auth'
-import { tx, type DbContext, type Tx } from '../db'
+import { lockUsers, tx, type DbContext, type Tx } from '../db'
 import { HttpError, parse } from '../http'
 import {
   groupTimeZone,
@@ -15,7 +15,8 @@ import {
 } from '../membership'
 import { pushToUsers } from '../push'
 import { publish, subscribe } from '../realtime'
-import { daysReport, todayReport, weeklyReport } from './me'
+import { refreshAllRollups } from '../rollup'
+import { appLabels, daysReport, todayReport, weeklyReport } from './me'
 
 const Uuid = z.string().uuid()
 const VisibilityEnum = z.enum(['summary', 'category', 'app'])
@@ -98,9 +99,11 @@ export async function buildBoard(
               exists (select 1 from usage_sessions s join devices d on d.id = s.device_id
                       where s.user_id = m.user_id and s.ended_at is null
                         and s.started_at > now() - interval '1 day'
+                        and not (s.package_name = any (excluded_packages_of(m.user_id)))
                         and d.last_synced_at > now() - make_interval(secs => $2 / 1000.0)) as active_now,
               (select max(coalesce(ended_at, started_at)) from usage_sessions s
-                where s.user_id = m.user_id and s.started_at > now() - interval '1 day') as last_active,
+                where s.user_id = m.user_id and s.started_at > now() - interval '1 day'
+                  and not (s.package_name = any (excluded_packages_of(m.user_id)))) as last_active,
               exists (select 1 from rests r where r.user_id = m.user_id and now() between r.starts_at and r.ends_at) as resting
        from group_members m where m.group_id = $1`,
       [groupId, ACTIVE_WINDOW_MS],
@@ -156,6 +159,38 @@ export async function buildBoard(
   }
 }
 
+// 안드로이드 패키지 이름(예: com.google.android.youtube)
+const PackageName = z.string().trim().max(200).regex(/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/)
+const PackageList = z
+  .array(PackageName)
+  .max(200)
+  .transform((l) => [...new Set(l)].sort())
+
+const excludedBy = async (c: Tx, userIds: string[]) =>
+  new Map(
+    (
+      await c.query<{ u: string; p: string[] }>('select u::text as u, excluded_packages_of(u) as p from unnest($1::uuid[]) u', [userIds])
+    ).rows.map((r) => [r.u, r.p.join(',')]),
+  )
+
+/**
+ * 그룹 정책이나 소속을 바꾸는 작업을 감싼다. 대상 사용자를 잠그고 바꾼 뒤,
+ * 적용되는 예외 앱이 달라진 사용자만 과거 기록까지 다시 집계한다.
+ * 그룹 행을 먼저 잠근 시스템 컨텍스트 트랜잭션 안에서 부른다
+ */
+async function changingExclusions<T>(c: Tx, userIds: string[], change: () => Promise<T>): Promise<T> {
+  await lockUsers(c, userIds)
+  const before = await excludedBy(c, userIds)
+  const result = await change()
+  const after = await excludedBy(c, userIds)
+  await refreshAllRollups(c, userIds.filter((id) => before.get(id) !== after.get(id)))
+  return result
+}
+
+const lockGroup = (c: Tx, groupId: string) => c.query('select 1 from groups where id = $1 for update', [groupId])
+const memberIds = async (c: Tx, groupId: string) =>
+  (await c.query<{ user_id: string }>('select user_id from group_members where group_id = $1', [groupId])).rows.map((r) => r.user_id)
+
 const ownerOf = async (c: Tx, groupId: string) =>
   (await c.query<{ owner_id: string }>('select owner_id from groups where id = $1', [groupId])).rows[0]?.owner_id
 
@@ -204,16 +239,21 @@ export default async function groupRoutes(app: FastifyInstance) {
         weekStart: z.number().int().min(0).max(6).optional(),
         visibility: VisibilityEnum.optional(),
         baselineMin: z.number().int().min(30).max(1440).optional(),
+        excludedPackages: PackageList.optional(),
       }),
       req.body,
     )
-    const groupId = await tx(ctx, async (c) => {
+    // 공통 예외 앱이 바뀌면 다른 구성원 집계도 다시 쓰므로 시스템 컨텍스트에서 권한을 직접 확인한다
+    const groupId = await tx({ kind: 'system' }, async (c) => {
       const m = await requireMember(c, ctx.userId, ['leader'])
-      await c.query(
-        `update groups set name = coalesce($2, name), emoji = coalesce($3, emoji),
-           week_start = coalesce($4, week_start), visibility = coalesce($5, visibility),
-           baseline_min = coalesce($6, baseline_min) where id = $1`,
-        [m.groupId, b.name ?? null, b.emoji ?? null, b.weekStart ?? null, b.visibility ?? null, b.baselineMin ?? null],
+      await lockGroup(c, m.groupId)
+      await changingExclusions(c, b.excludedPackages ? await memberIds(c, m.groupId) : [], () =>
+        c.query(
+          `update groups set name = coalesce($2, name), emoji = coalesce($3, emoji),
+             week_start = coalesce($4, week_start), visibility = coalesce($5, visibility),
+             baseline_min = coalesce($6, baseline_min), excluded_packages = coalesce($7, excluded_packages) where id = $1`,
+          [m.groupId, b.name ?? null, b.emoji ?? null, b.weekStart ?? null, b.visibility ?? null, b.baselineMin ?? null, b.excludedPackages ?? null],
+        ),
       )
       return m.groupId
     })
@@ -226,8 +266,11 @@ export default async function groupRoutes(app: FastifyInstance) {
     const ctx = await requireUser(req)
     const groupId = await tx({ kind: 'system' }, async (c) => {
       const m = await requireMember(c, ctx.userId)
-      if ((await ownerOf(c, m.groupId)) === ctx.userId) await c.query('delete from groups where id = $1', [m.groupId])
-      else await c.query('delete from group_members where user_id = $1', [ctx.userId])
+      await lockGroup(c, m.groupId)
+      // 그룹을 지우면 모든 구성원의 예외 앱이 풀리므로 지우기 전에 대상을 정해 둔다
+      if ((await ownerOf(c, m.groupId)) === ctx.userId)
+        await changingExclusions(c, await memberIds(c, m.groupId), () => c.query('delete from groups where id = $1', [m.groupId]))
+      else await changingExclusions(c, [ctx.userId], () => c.query('delete from group_members where user_id = $1', [ctx.userId]))
       return m.groupId
     })
     publish(groupId, { type: 'members' })
@@ -239,16 +282,40 @@ export default async function groupRoutes(app: FastifyInstance) {
     const ctx = await requireUser(req)
     return tx(ctx, async (c) => {
       const m = await requireMember(c, ctx.userId)
-      const r = await c.query(
+      const leader = m.role === 'leader'
+      // 구성원별 예외 앱은 관리자에게만 보낸다
+      const r = await c.query<{ excludedPackages: string[] | null }>(
         `select gm.user_id as "userId", gm.role, gm.nickname, gm.visibility_override as "visibilityOverride",
+                case when $2 then gm.excluded_packages end as "excludedPackages",
                 gm.joined_at as "joinedAt", u.display_name as "displayName", u.email, u.avatar_url as "avatarUrl",
                 (select count(*)::int from devices d where d.user_id = gm.user_id and d.active) as devices,
                 (select max(last_synced_at) from devices d where d.user_id = gm.user_id) as "lastSyncedAt"
          from group_members gm join users u on u.id = gm.user_id
          where gm.group_id = $1 order by gm.role, gm.joined_at`,
-        [m.groupId],
+        [m.groupId, leader],
       )
-      return { members: r.rows }
+      if (!leader) return { members: r.rows }
+      const labels = await appLabels(c, [...new Set(r.rows.flatMap((x) => x.excludedPackages ?? []))])
+      return { members: r.rows, appLabels: Object.fromEntries(Object.entries(labels).map(([k, v]) => [k, v.label])) }
+    })
+  })
+
+  /**
+   * 예외 앱 고르기용 앱 검색(관리자). 공용 앱 카탈로그의 이름만 돌려주고
+   * 누가 얼마나 쓰는지는 붙이지 않아 공개 수준을 넘지 않는다
+   */
+  app.get('/api/group/app-catalog', async (req) => {
+    const ctx = await requireUser(req)
+    const q = parse(z.object({ q: z.string().trim().min(2).max(100) }), req.query)
+    return tx(ctx, async (c) => {
+      await requireMember(c, ctx.userId, ['leader'])
+      const like = `%${q.q.replace(/[\\%_]/g, (s) => `\\${s}`)}%`
+      const r = await c.query(
+        `select package_name as "packageName", label from apps
+         where label ilike $1 or package_name ilike $1 order by label, package_name limit 20`,
+        [like],
+      )
+      return { apps: r.rows }
     })
   })
 
@@ -260,21 +327,36 @@ export default async function groupRoutes(app: FastifyInstance) {
         role: z.enum(['leader', 'member', 'viewer']).optional(),
         nickname: z.string().trim().max(20).nullable().optional(),
         visibilityOverride: VisibilityEnum.nullable().optional(),
+        excludedPackages: PackageList.optional(),
       }),
       req.body,
     )
-    const groupId = await tx(ctx, async (c) => {
+    // 구성원 예외 앱을 바꾸면 그 사람의 집계를 다시 쓰므로 시스템 컨텍스트에서 권한을 직접 확인한다
+    const groupId = await tx({ kind: 'system' }, async (c) => {
       const m = await requireMember(c, ctx.userId, ['leader'])
       if (userId === ctx.userId && b.role) throw new HttpError(400, 'cannot_change_own_role')
       // 그룹을 만든 사람은 항상 관리자로 남는다
       if (b.role && userId === (await ownerOf(c, m.groupId))) throw new HttpError(400, 'owner_role_fixed')
-      const r = await c.query(
-        `update group_members set
-           role = coalesce($3, role),
-           nickname = case when $4 then $5 else nickname end,
-           visibility_override = case when $6 then $7::visibility_level else visibility_override end
-         where user_id = $1 and group_id = $2`,
-        [userId, m.groupId, b.role ?? null, b.nickname !== undefined, b.nickname ?? null, b.visibilityOverride !== undefined, b.visibilityOverride ?? null],
+      await lockGroup(c, m.groupId)
+      const r = await changingExclusions(c, b.excludedPackages ? [userId] : [], () =>
+        c.query(
+          `update group_members set
+             role = coalesce($3, role),
+             nickname = case when $4 then $5 else nickname end,
+             visibility_override = case when $6 then $7::visibility_level else visibility_override end,
+             excluded_packages = coalesce($8, excluded_packages)
+           where user_id = $1 and group_id = $2`,
+          [
+            userId,
+            m.groupId,
+            b.role ?? null,
+            b.nickname !== undefined,
+            b.nickname ?? null,
+            b.visibilityOverride !== undefined,
+            b.visibilityOverride ?? null,
+            b.excludedPackages ?? null,
+          ],
+        ),
       )
       if (!r.rowCount) throw new HttpError(404, 'not_found')
       return m.groupId
@@ -344,11 +426,15 @@ export default async function groupRoutes(app: FastifyInstance) {
   app.delete('/api/group/members/:userId', async (req) => {
     const ctx = await requireUser(req)
     const { userId } = parse(z.object({ userId: Uuid }), req.params)
-    const groupId = await tx(ctx, async (c) => {
+    // 내보낸 사람의 예외 앱이 풀려 그 사람의 집계를 다시 쓰므로 시스템 컨텍스트에서 권한을 직접 확인한다
+    const groupId = await tx({ kind: 'system' }, async (c) => {
       const m = await requireMember(c, ctx.userId, ['leader'])
       if (userId === ctx.userId) throw new HttpError(400, 'cannot_remove_self')
       if (userId === (await ownerOf(c, m.groupId))) throw new HttpError(400, 'owner_role_fixed')
-      await c.query('delete from group_members where user_id = $1 and group_id = $2', [userId, m.groupId])
+      await lockGroup(c, m.groupId)
+      await changingExclusions(c, [userId], () =>
+        c.query('delete from group_members where user_id = $1 and group_id = $2', [userId, m.groupId]),
+      )
       return m.groupId
     })
     publish(groupId, { type: 'members' })
@@ -437,7 +523,11 @@ export default async function groupRoutes(app: FastifyInstance) {
         const u = await c.query<{ email: string }>('select email from users where id = $1', [ctx.userId])
         if (u.rows[0]?.email.toLowerCase() !== inv.email.toLowerCase()) throw new HttpError(403, 'invite_email_mismatch')
       }
-      await c.query('insert into group_members (user_id, group_id, role) values ($1, $2, $3)', [ctx.userId, inv.group_id, inv.role])
+      await lockGroup(c, inv.group_id)
+      // 들어간 그룹의 공통 예외 앱이 과거 기록에도 적용된다
+      await changingExclusions(c, [ctx.userId], () =>
+        c.query('insert into group_members (user_id, group_id, role) values ($1, $2, $3)', [ctx.userId, inv.group_id, inv.role]),
+      )
       await c.query('update invites set used_count = used_count + 1 where id = $1', [inv.id])
       await c.query('update users set last_role = $2 where id = $1', [ctx.userId, inv.role])
       return inv.group_id
