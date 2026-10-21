@@ -1,0 +1,49 @@
+# 이만, (iman)
+
+내 모든 안드로이드 기기의 화면 시간을 앱별 구간(시작~종료)으로 기록하고, 그룹과 함께 "이만, 쉬어 가는" 습관을 만드는 서비스입니다. 웹앱, 안드로이드 앱(위젯 포함), 대시보드(키오스크)로 사용합니다.
+
+- 총 사용시간: 모든 앱 사용 구간 길이의 합
+- 실제 사용시간: 동시 실행(분할 화면, PIP, 여러 기기)을 한 번만 센 합집합 길이
+
+계획과 결정 사항은 `docs/plans/261021-iman.md`, 조사 내용은 `docs/specs/261021-iman.md`에 있습니다.
+
+## 구조
+
+| 경로 | 내용 |
+|---|---|
+| `packages/core` | 구간 계산, 시간대, 목표 판정(순수 TS) |
+| `apps/api` | Fastify API, 정적 웹 제공, SSE, 예약 작업 |
+| `apps/web` | React SPA(웹, 앱 WebView, 대시보드). 스타일은 Tailwind CSS v4, 디자인 토큰은 `src/styles/tokens.css`와 `app.css`의 `@theme` |
+| `apps/web/android` | Capacitor 안드로이드. 수집기, 동기화, 위젯, 넛지, 업데이터는 `app/src/main/java/com/cloimism/iman` |
+| `db/migrations` | 스키마, `range_agg` 집계 함수, RLS |
+| `fixtures/intervals` | TS, Kotlin, SQL 공용 골든 케이스 |
+| `deploy` | 로컬 도커 엔진 도커 엔진용 compose(Postgres, API, 백업) |
+
+## 개발
+
+```powershell
+pnpm install
+pnpm --filter @iman/api dev      # 127.0.0.1:47211, apps/api/.env.local (DB: iman_dev, DEV_LOGIN=1)
+pnpm --filter @iman/web dev      # http://localhost:5173 (API 프록시)
+pnpm --filter @iman/api exec tsx scripts/seed-dev.ts   # 데모 그룹과 14일 기록
+pnpm test                        # core 단위, API 통합(iman_test DB 자동 생성)
+cd apps/web/android; ./gradlew testDebugUnitTest assembleDebug
+```
+
+에뮬레이터 개발 빌드는 `VITE_API_BASE=http://localhost:47211`, `IMAN_DEV=1`, `IMAN_API_BASE=http://localhost:47211`로 빌드하고 `adb reverse tcp:47211 tcp:47211`을 연결합니다. 디버그 빌드는 구글 클라이언트 ID가 없으면 개발 로그인을 씁니다.
+
+## 운영
+
+```powershell
+cd deploy
+docker compose -f compose.yaml up -d --build
+```
+
+- `deploy/.env`에 비밀값(DB 비밀번호, JWT, `GOOGLE_WEB_CLIENT_ID`)을 두고, FCM 서비스 계정은 `deploy/secrets/fcm-service-account.json`에 둡니다.
+- API는 `127.0.0.1:47210`, Postgres는 `127.0.0.1:47200`. 외부 공개는 Cloudflare Tunnel(`iman.example.com`)만 사용합니다.
+- 로컬 도커 엔진 엔진의 브리지 네트워크는 외부 연결과 컨테이너 간 연결이 막혀 있어 API와 백업 컨테이너는 호스트 네트워크를 씁니다.
+- 백업: 매일 03:30 `deploy/backups`(또는 `BACKUP_DIR`)에 `pg_dump`, 14일 보관. 복원은 `pg_restore --clean -d iman <파일>`.
+
+## 안드로이드 배포
+
+`v1.2.3` 태그를 푸시하면 `.github/workflows/release-android.yml`이 서명된 APK와 `latest.json`을 GitHub Release에 올리고, 앱은 설정 화면에서 직접 업데이트합니다. 필요한 Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `GOOGLE_SERVICES_JSON`. Variables: `GOOGLE_WEB_CLIENT_ID`, `MIN_SUPPORTED_VERSION_CODE`.
