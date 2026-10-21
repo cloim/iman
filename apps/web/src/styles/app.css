@@ -1,0 +1,225 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/* 공용 기준 컴포넌트(DataGrid, Modal)의 JSX 클래스도 Tailwind 가 생성하도록 스캔 */
+@source '../components';
+
+/* 디자인 토큰을 Tailwind 테마로 연결. 다크 모드는 tokens.css 의 변수 전환을 그대로 따른다 */
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-comma: var(--comma);
+  --color-comma-deep: var(--comma-deep);
+  --color-comma-tint: var(--comma-tint);
+  --color-now: var(--now);
+  --color-now-tint: var(--now-tint);
+  --color-near: var(--near);
+  --color-near-tint: var(--near-tint);
+  --color-near-ink: var(--near-ink);
+  --color-over: var(--over);
+  --color-over-tint: var(--over-tint);
+  --color-over-ink: var(--over-ink);
+  --color-shadow: var(--shadow-color);
+  --color-scrim: var(--scrim);
+}
+
+@theme static {
+  --font-sans: 'Pretendard Variable', Pretendard, system-ui, sans-serif;
+  --font-display: 'Jua', 'Pretendard Variable', sans-serif;
+  --font-num: 'Nunito Variable', 'Pretendard Variable', sans-serif;
+  --radius-tile: 10px;
+  --radius-panel: 16px;
+  --radius-card: 24px;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+  --animate-comma-drop: comma-drop 0.55s var(--ease-spring) both;
+  --animate-breathe: breathe 2.4s ease-in-out infinite;
+
+  @keyframes shimmer {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: -100% 0;
+    }
+  }
+  /* 쉼표 "톡" 떨어지기: 목표 달성과 쉬기 시작 순간에만 */
+  @keyframes comma-drop {
+    0% {
+      transform: translateY(-14px) scale(0.9);
+      opacity: 0;
+    }
+    60% {
+      transform: translateY(2px) scale(1.04);
+      opacity: 1;
+    }
+    100% {
+      transform: none;
+    }
+  }
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.45;
+      transform: scale(0.82);
+    }
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* 종이 질감: 아주 옅은 노이즈를 배경에만 */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.35;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .55 0 0 0 0 .5 0 0 0 0 .4 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  #root {
+    position: relative;
+    z-index: 1;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+/* 숫자: 둥근 고딕 + 고정폭 숫자 */
+@utility num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* SVG 안에서 점이 제자리에서 숨 쉬듯 */
+@utility breathe {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: var(--animate-breathe);
+}
+
+/* 여러 화면에서 반복되는 요소만 컴포넌트 클래스로 둔다 */
+@layer components {
+  .btn,
+  .btn-primary {
+    @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-full border-0 bg-ink px-[18px] font-semibold text-paper no-underline transition-transform active:scale-[0.97] disabled:cursor-default disabled:opacity-50;
+  }
+  .btn-comma {
+    @apply bg-comma text-[#18352a];
+  }
+  .btn-ghost {
+    @apply bg-transparent text-ink shadow-[inset_0_0_0_1.5px_var(--line-strong)];
+  }
+  .btn-danger {
+    @apply bg-over-tint text-over-ink;
+  }
+  .btn-sm {
+    @apply min-h-9 px-3.5 text-sm;
+  }
+  .icon-btn {
+    @apply inline-grid size-10 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-ink-2 hover:bg-surface-2 hover:text-ink disabled:opacity-40;
+  }
+  .card {
+    @apply rounded-card bg-surface p-5 shadow-[0_0_0_1px_var(--line)];
+  }
+  .card-tint {
+    @apply bg-comma-tint shadow-none;
+  }
+  .field {
+    @apply grid gap-1.5;
+  }
+  .field > span {
+    @apply text-[13px] font-semibold text-ink-2;
+  }
+  .input {
+    @apply min-h-[46px] w-full rounded-tile border-[1.5px] border-line-strong bg-surface px-3.5 focus:border-comma-deep focus:outline-none;
+  }
+  .segmented {
+    @apply inline-flex rounded-full bg-surface-2 p-[3px];
+  }
+  .segmented button {
+    @apply min-h-[34px] cursor-pointer rounded-full border-0 bg-transparent px-3.5 text-sm font-semibold text-ink-3 aria-pressed:bg-surface aria-pressed:text-ink aria-pressed:shadow-[0_1px_3px_var(--shadow-color)];
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-[3px] text-[13px] font-semibold text-ink-2;
+  }
+  .chip-met {
+    @apply bg-comma-tint text-comma-deep;
+  }
+  .chip-near {
+    @apply bg-near-tint text-near-ink;
+  }
+  .chip-over {
+    @apply bg-over-tint text-over-ink;
+  }
+  .chip-now {
+    @apply bg-now-tint text-[#2c6f98];
+  }
+  /* 스켈레톤: 기다리는 요소에만 */
+  .skeleton,
+  .skeleton-text {
+    @apply animate-shimmer rounded-tile bg-[linear-gradient(90deg,var(--surface-2)_0%,var(--line)_50%,var(--surface-2)_100%)] bg-size-[200%_100%];
+  }
+  .skeleton-text {
+    @apply inline-block h-[0.9em] w-3/5;
+  }
+  .empty {
+    @apply grid justify-items-center gap-2.5 px-4 py-8 text-center text-ink-3;
+  }
+  .check {
+    @apply flex min-h-8 items-center gap-2.5;
+  }
+  .check input {
+    @apply size-[18px] accent-comma-deep;
+  }
+  .emoji-pick {
+    @apply size-11 cursor-pointer rounded-[14px] border-0 bg-surface-2 text-[22px] aria-checked:bg-comma-tint aria-checked:shadow-[inset_0_0_0_2px_var(--comma)];
+  }
+  .option-card {
+    @apply grid cursor-pointer gap-1 rounded-panel border-0 bg-surface-2 p-4 text-left disabled:cursor-not-allowed disabled:opacity-50 aria-checked:bg-comma-tint aria-checked:shadow-[inset_0_0_0_2px_var(--comma)] [&_span]:text-[13px] [&_span]:text-ink-3 [&_strong]:text-base;
+  }
+  .qr {
+    @apply size-[200px] rounded-panel bg-[#fffdf7] p-2 [&_svg]:size-full;
+  }
+}

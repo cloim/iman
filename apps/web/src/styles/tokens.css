@@ -1,0 +1,74 @@
+/* 이만, 디자인 토큰: "종이 위의 쉼표" */
+:root {
+  color-scheme: light;
+  --paper: #fef9ed;
+  --surface: #fffdf7;
+  --surface-2: #f8f2e3;
+  --ink: #3c3e41;
+  --ink-2: #5d5f63;
+  --ink-3: #8c8a84;
+  --line: #ece4d2;
+  --line-strong: #ddd3bd;
+
+  --comma: #7ec3a8;
+  --comma-deep: #4f9c7f;
+  --comma-tint: #e3eee4;
+  --now: #87c6ec;
+  --now-tint: #e3f1fb;
+  --near: #e6b85c;
+  --near-tint: #fbefd2;
+  --near-ink: #8a6418;
+  --over: #e98e7a;
+  --over-tint: #fbe3dc;
+  --over-ink: #a2493a;
+
+  --focus-ring: color-mix(in srgb, var(--comma-deep) 45%, transparent);
+  --scrim: rgba(36, 32, 26, 0.38);
+  --shadow-color: rgba(60, 50, 30, 0.14);
+
+  --gutter: 16px;
+
+
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --paper: #1f2023;
+    --surface: #26282b;
+    --surface-2: #2d2f33;
+    --ink: #f4eedf;
+    --ink-2: #cfc9bb;
+    --ink-3: #9b968b;
+    --line: #36383c;
+    --line-strong: #474a4f;
+    --comma-tint: #2b3a33;
+    --now-tint: #23343f;
+    --near-tint: #3d3322;
+    --near-ink: #f0cc85;
+    --over-tint: #43302b;
+    --over-ink: #f2ae9f;
+    --scrim: rgba(0, 0, 0, 0.55);
+    --shadow-color: rgba(0, 0, 0, 0.4);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --paper: #1f2023;
+  --surface: #26282b;
+  --surface-2: #2d2f33;
+  --ink: #f4eedf;
+  --ink-2: #cfc9bb;
+  --ink-3: #9b968b;
+  --line: #36383c;
+  --line-strong: #474a4f;
+  --comma-tint: #2b3a33;
+  --now-tint: #23343f;
+  --near-tint: #3d3322;
+  --near-ink: #f0cc85;
+  --over-tint: #43302b;
+  --over-ink: #f2ae9f;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --shadow-color: rgba(0, 0, 0, 0.4);
+}
