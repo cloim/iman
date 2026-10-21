@@ -27,6 +27,9 @@
   --shadow-color: rgba(60, 50, 30, 0.14);
 
   --gutter: 16px;
+  /* 공용 기준 컴포넌트(SelectControl)가 쓰는 글자색 이름 */
+  --text-1: var(--ink);
+  --text-3: var(--ink-3);
 
 
 }
