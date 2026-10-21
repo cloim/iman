@@ -152,7 +152,7 @@ export default function LoginPage() {
         )}
         <AppDownload compact />
         <p className="text-[13px] text-ink-3">
-          로그인하면 사용 기록은 본인과, 그룹대표가 정한 공개 수준 안에서만 그룹에 공유돼요. <a href="/privacy">개인정보처리방침</a>
+          로그인하면 사용 기록은 본인과, 관리자가 정한 공개 수준 안에서만 그룹에 공유돼요. <a href="/privacy">개인정보처리방침</a>
         </p>
       </div>
     </div>

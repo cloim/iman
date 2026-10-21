@@ -11,7 +11,7 @@ interface Pairing {
   expiresAt: number
 }
 
-/** 키오스크 페어링: 로그인 없이 6자리 코드와 QR 을 띄우고 그룹대표의 승인을 기다린다 */
+/** 키오스크 페어링: 로그인 없이 6자리 코드와 QR 을 띄우고 관리자의 승인을 기다린다 */
 export default function PairPage() {
   const navigate = useNavigate()
   const existing = loadKiosk()
@@ -35,7 +35,7 @@ export default function PairPage() {
         saveKiosk({ id: p.id, token: p.token, dashboardId: null })
         setPairing(p)
         setError('')
-        const url = `${window.location.origin}/group/dashboards?pair=${p.code}`
+        const url = `${window.location.origin}/me/settings?tab=dashboard&pair=${p.code}`
         void QRCode.toString(url, { type: 'svg', margin: 1, color: { dark: '#3c3e41', light: '#fffdf7' } }).then(setQr)
       })
       .catch(() => setError('서버에 연결하지 못했어요. 잠시 후 자동으로 다시 시도해요.'))
@@ -82,7 +82,7 @@ export default function PairPage() {
             </p>
             <div className="qr" role="img" aria-label="연결용 QR 코드" dangerouslySetInnerHTML={{ __html: qr }} />
             <p className="text-ink-3 max-w-[420px] text-[15px]">
-              그룹대표가 휴대폰으로 QR을 찍거나, 이만의 <strong>그룹 &gt; 대시보드</strong> 화면에 코드를 입력하면 바로 연결돼요. 코드는 5분마다 바뀌어요.
+              관리자가 휴대폰으로 QR을 찍거나, 이만의 <strong>그룹 &gt; 대시보드</strong> 화면에 코드를 입력하면 바로 연결돼요. 코드는 5분마다 바뀌어요.
             </p>
           </>
         ) : (

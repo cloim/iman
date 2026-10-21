@@ -6,7 +6,7 @@ import { AppDownload } from '../components/AppDownload'
 import { Wordmark } from '../components/brand/Comma'
 import { api, ApiError, errorText } from '../lib/api'
 import { useMe } from '../lib/queries'
-import { ROLE_LABEL, VISIBILITY_HINT, VISIBILITY_LABEL, type Role, type Visibility } from '../lib/types'
+import { APP_LEVEL_NOTE, ROLE_LABEL, VISIBILITY_HINT, VISIBILITY_LABEL, type Role, type Visibility } from '../lib/types'
 
 interface Preview {
   role: Role
@@ -80,7 +80,8 @@ export default function JoinPage() {
                   <ShieldCheck size={18} aria-hidden /> 공개 수준: {VISIBILITY_LABEL[preview.data.visibility]}
                 </p>
                 <p className="text-[13px] text-ink-2">
-                  그룹 구성원과 대시보드에 {VISIBILITY_HINT[preview.data.visibility]}이 보여요. 공개 수준은 그룹대표가 정하며, 내 설정 화면에서 언제든 확인할 수 있어요.
+                  그룹 구성원과 대시보드에 {VISIBILITY_HINT[preview.data.visibility]}이 보여요. 공개 수준은 관리자가 정하며, 내 설정 화면에서 언제든 확인할 수 있어요.
+                  {preview.data.visibility === 'app' && ` ${APP_LEVEL_NOTE}`}
                 </p>
               </div>
             </div>

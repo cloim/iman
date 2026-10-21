@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react'
-import { createBrowserRouter, Navigate, useLocation } from 'react-router'
+import { createBrowserRouter, Navigate, useLocation, useSearchParams } from 'react-router'
 import { AppShell } from './components/AppShell'
 import { ApiError } from './lib/api'
 import { useMe } from './lib/queries'
@@ -10,12 +10,9 @@ const JoinPage = lazy(() => import('./pages/JoinPage'))
 const PermissionPage = lazy(() => import('./pages/PermissionPage'))
 const TodayPage = lazy(() => import('./pages/TodayPage'))
 const HistoryPage = lazy(() => import('./pages/HistoryPage'))
-const GoalsPage = lazy(() => import('./pages/GoalsPage'))
-const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'))
 const GroupPage = lazy(() => import('./pages/group/GroupPage'))
 const MembersPage = lazy(() => import('./pages/group/MembersPage'))
-const GroupSettingsPage = lazy(() => import('./pages/group/GroupSettingsPage'))
-const DashboardsPage = lazy(() => import('./pages/group/DashboardsPage'))
 const BoardPage = lazy(() => import('./pages/BoardPage'))
 const PairPage = lazy(() => import('./pages/PairPage'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
@@ -37,6 +34,13 @@ function Guard({ children, needGroup = true }: { children: ReactNode; needGroup?
   return <>{children}</>
 }
 
+/** 설정 메뉴로 옮긴 예전 경로. 키오스크 페어링 링크의 ?pair= 값은 그대로 넘긴다 */
+function ToSettings({ tab }: { tab: string }) {
+  const [params] = useSearchParams()
+  params.set('tab', tab)
+  return <Navigate to={`/me/settings?${params}`} replace />
+}
+
 export const router = createBrowserRouter([
   { path: '/login', element: <Page><LoginPage /></Page> },
   { path: '/pair', element: <Page><PairPage /></Page> },
@@ -51,12 +55,12 @@ export const router = createBrowserRouter([
     children: [
       { path: '/me', element: <Page><TodayPage /></Page> },
       { path: '/me/history', element: <Page><HistoryPage /></Page> },
-      { path: '/me/goals', element: <Page><GoalsPage /></Page> },
+      { path: '/me/goals', element: <Navigate to="/me" replace /> },
       { path: '/me/settings', element: <Page><SettingsPage /></Page> },
       { path: '/group', element: <Page><GroupPage /></Page> },
       { path: '/group/members', element: <Page><MembersPage /></Page> },
-      { path: '/group/settings', element: <Page><GroupSettingsPage /></Page> },
-      { path: '/group/dashboards', element: <Page><DashboardsPage /></Page> },
+      { path: '/group/settings', element: <ToSettings tab="group" /> },
+      { path: '/group/dashboards', element: <ToSettings tab="dashboard" /> },
     ],
   },
   { path: '*', element: <Navigate to="/me" replace /> },

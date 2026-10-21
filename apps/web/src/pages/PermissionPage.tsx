@@ -37,7 +37,7 @@ export default function PermissionPage() {
           </p>
           <p className="text-[13px] text-ink-2">
             이만은 안드로이드 사용 기록에서 <strong>어떤 앱을 언제부터 언제까지 화면에 띄웠는지</strong>만 읽어요. 메시지 내용, 화면 내용, 위치는 읽지 않아요.
-            기록은 내 계정에 저장되고, 그룹에는 그룹대표가 정한 공개 수준만큼만 보여요.
+            기록은 내 계정에 저장되고, 그룹에는 관리자가 정한 공개 수준만큼만 보여요.
           </p>
           {!status?.usagePermission && (
             <button type="button" className="btn btn-comma" onClick={() => void native.openUsageSettings()}>

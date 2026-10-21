@@ -1,22 +1,30 @@
-import { CalendarDays, Home, Settings, Target, Users } from 'lucide-react'
+import { ArrowLeft, CalendarDays, Home, Settings, Users } from 'lucide-react'
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { NavLink, Outlet } from 'react-router'
+import { Link, NavLink, Outlet } from 'react-router'
 import { useMe } from '../lib/queries'
 import { Wordmark } from './brand/Comma'
 
-const BarContext = createContext<{ setTitle: (t: string) => void; slot: HTMLElement | null }>({
-  setTitle: () => {},
+interface Bar {
+  title: string
+  /** 하위 페이지면 되돌아갈 상위 페이지 경로와 이름 */
+  back?: { to: string; label: string }
+}
+
+const BarContext = createContext<{ setBar: (b: Bar) => void; slot: HTMLElement | null }>({
+  setBar: () => {},
   slot: null,
 })
 
 /** 각 화면이 상단 앱 바 제목을 지정한다. 제목은 앱 바에만 표시하고 본문에서 반복하지 않는다 */
-export function useAppBar(title: string) {
-  const { setTitle } = useContext(BarContext)
+export function useAppBar(title: string, back?: Bar['back']) {
+  const { setBar } = useContext(BarContext)
+  const to = back?.to
+  const label = back?.label
   useEffect(() => {
-    setTitle(title)
+    setBar({ title, back: to && label ? { to, label } : undefined })
     document.title = `${title} | 이만,`
-  }, [setTitle, title])
+  }, [setBar, title, to, label])
 }
 
 /** 앱 바 우측 아이콘 버튼 자리 */
@@ -26,7 +34,7 @@ export function BarActions({ children }: { children: ReactNode }) {
 }
 
 export function AppShell() {
-  const [title, setTitle] = useState('')
+  const [bar, setBar] = useState<Bar>({ title: '' })
   const [slot, setSlot] = useState<HTMLElement | null>(null)
   const me = useMe()
   const role = me.data?.group?.role
@@ -34,14 +42,13 @@ export function AppShell() {
     { to: '/me', label: '오늘', icon: Home, end: true },
     { to: '/me/history', label: '기록', icon: CalendarDays },
     ...(role ? [{ to: '/group', label: '그룹', icon: Users }] : []),
-    { to: '/me/goals', label: '목표', icon: Target },
     { to: '/me/settings', label: '설정', icon: Settings },
   ]
   return (
-    <BarContext.Provider value={{ setTitle, slot }}>
+    <BarContext.Provider value={{ setBar, slot }}>
       <div className="grid min-h-full md:grid-cols-[220px_minmax(0,1fr)]">
         <aside className="sticky top-0 hidden h-screen border-r border-line px-4 py-6 md:block" aria-label="주 메뉴">
-          <div className="px-3 pt-1 pb-7">
+          <div className="flex justify-center pt-1 pb-7">
             <Wordmark size={30} />
           </div>
           <nav className="grid gap-1">
@@ -60,7 +67,17 @@ export function AppShell() {
         </aside>
         <div className="min-w-0">
           <header className="sticky top-0 z-10 flex min-h-14 items-center justify-between gap-2 bg-paper/90 pt-[env(safe-area-inset-top)] pr-2 pl-4 backdrop-blur-md md:min-h-16 md:px-[max(16px,calc((100%-872px)/2))]">
-            <h1 className="text-[22px]">{title}</h1>
+            <div className="flex min-w-0 items-center gap-1">
+              {bar.back && (
+                <Link to={bar.back.to} className="icon-btn -ml-2 flex-none" aria-label={`${bar.back.label} 화면으로 돌아가기`} title={`${bar.back.label} 화면으로 돌아가기`}>
+                  <ArrowLeft size={22} aria-hidden />
+                </Link>
+              )}
+              <h1 className="truncate text-[22px]">
+                {bar.back && <span className="hidden text-ink-3 sm:inline">{bar.back.label} / </span>}
+                {bar.title}
+              </h1>
+            </div>
             <div className="flex items-center gap-0.5" ref={setSlot} />
           </header>
           <main className="mx-auto max-w-[920px] px-4 pt-1 pb-[calc(96px+env(safe-area-inset-bottom))] md:px-6 md:pt-2 md:pb-12">
