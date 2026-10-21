@@ -20,4 +20,6 @@ export const env = {
   /** 개발, 테스트 전용 로그인 허용 */
   devLogin: process.env.NODE_ENV !== 'production' && process.env.DEV_LOGIN === '1',
   production: process.env.NODE_ENV === 'production',
+  /** 0이면 정기 작업을 돌리지 않는다. 운영 DB에 붙는 개발 서버가 알림과 리포트를 중복으로 보내지 않게 */
+  scheduler: process.env.SCHEDULER !== '0',
 }

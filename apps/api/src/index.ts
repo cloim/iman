@@ -11,5 +11,5 @@ const { existsSync } = await import('node:fs')
 
 const app = await buildServer()
 await migrate(env.databaseOwnerUrl, existsSync(bundled) ? bundled : source, env.appDbPassword, (m) => app.log.info(m))
-startScheduler(app.log)
+if (env.scheduler) startScheduler(app.log)
 await app.listen({ host: env.host, port: env.port })

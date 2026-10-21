@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch --env-file=.env.local src/index.ts",
+    "dev:live": "tsx watch --env-file=.env.live.local src/index.ts",
     "start": "node dist/index.js",
     "build": "node build.mjs",
     "migrate": "tsx --env-file=.env.local src/migrate-cli.ts",

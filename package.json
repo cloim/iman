@@ -10,6 +10,7 @@
   "scripts": {
     "dev:web": "pnpm --filter @iman/web dev",
     "dev:api": "pnpm --filter @iman/api dev",
+    "dev:api:live": "pnpm --filter @iman/api dev:live",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
