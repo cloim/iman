@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: iman
+          POSTGRES_USER: iman
+          POSTGRES_PASSWORD: ci
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U iman" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: env
+        run: |
+          cat > apps/api/.env.local <<EOF
+          DATABASE_URL=postgres://iman_app:ci_app@127.0.0.1:5432/iman
+          DATABASE_OWNER_URL=postgres://iman:ci@127.0.0.1:5432/iman
+          APP_DB_PASSWORD=ci_app
+          JWT_SECRET=ci-secret-ci-secret-ci-secret-ci
+          PUBLIC_ORIGIN=http://localhost:5173
+          DEV_LOGIN=1
+          EOF
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter @iman/web build
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: android unit tests
+        working-directory: apps/web/android
+        run: ./gradlew --no-daemon testDebugUnitTest

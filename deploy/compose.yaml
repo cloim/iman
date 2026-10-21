@@ -1,0 +1,81 @@
+name: iman
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: iman-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: iman
+      POSTGRES_USER: iman
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?deploy/.env 에 POSTGRES_PASSWORD 필요}
+      TZ: Asia/Seoul
+    ports:
+      - 127.0.0.1:47200:5432
+    volumes:
+      - iman_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U iman -d iman']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 로컬 도커 엔진 엔진의 브리지 네트워크는 외부 연결과 컨테이너 간 연결이 막혀 있어 호스트 네트워크를 쓴다(구글 토큰 검증, FCM 필요).
+  # 바인딩은 127.0.0.1 로 제한하고 외부 공개는 Cloudflare Tunnel 만 사용
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      network: host
+    image: iman-api:latest
+    container_name: iman-api
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      HOST: 127.0.0.1
+      PORT: 47210
+      DATABASE_URL: postgres://iman_app:${APP_DB_PASSWORD}@127.0.0.1:47200/iman
+      DATABASE_OWNER_URL: postgres://iman:${POSTGRES_PASSWORD}@127.0.0.1:47200/iman
+      WEB_DIST: /app/web
+    volumes:
+      - ./secrets:/run/secrets/iman:ro
+
+  # 매일 03:30 pg_dump, 14일 보관. 복원: pg_restore --clean -d iman <파일>
+  backup:
+    image: postgres:17
+    container_name: iman-backup
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      TZ: Asia/Seoul
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
+    entrypoint:
+      - sh
+      - -c
+      - |
+        while true; do
+          if [ "$$(date +%H%M)" = "0330" ] || [ ! -f /backups/.initial ]; then
+            f=/backups/iman-$$(date +%Y%m%d-%H%M).dump
+            if pg_dump -h 127.0.0.1 -p 47200 -U iman -Fc iman > "$$f.tmp"; then
+              mv "$$f.tmp" "$$f" && touch /backups/.initial
+            else
+              rm -f "$$f.tmp"
+            fi
+            find /backups -name 'iman-*.dump' -mtime +14 -delete
+            sleep 61
+          fi
+          sleep 30
+        done
+
+volumes:
+  iman_pgdata:
