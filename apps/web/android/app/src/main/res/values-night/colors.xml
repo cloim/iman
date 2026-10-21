@@ -1,0 +1,6 @@
+<resources>
+    <color name="paper">#1F2023</color>
+    <color name="widget_bg">#26282B</color>
+    <color name="widget_ink">#F4EEDF</color>
+    <color name="widget_ink3">#9B968B</color>
+</resources>

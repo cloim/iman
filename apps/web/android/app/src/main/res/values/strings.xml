@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">이만</string>
+    <string name="title_activity_main">이만</string>
+    <string name="package_name">com.cloimism.iman</string>
+    <string name="custom_url_scheme">com.cloimism.iman</string>
+    <string name="widget_small_name">이만, 오늘</string>
+    <string name="widget_small_desc">오늘 실제 사용시간과 쉼표 게이지</string>
+    <string name="widget_medium_name">이만, 오늘 자세히</string>
+    <string name="widget_medium_desc">쉼표 게이지, 타임라인, 많이 쓴 앱, 이만 쉬기 버튼</string>
+</resources>

@@ -1,0 +1,14 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="12dp">
+    <ImageView android:id="@+id/widget_gauge" android:layout_width="56dp" android:layout_height="60dp" android:contentDescription="오늘 목표 대비 사용량" />
+    <TextView android:id="@+id/widget_value" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp"
+        android:textColor="@color/widget_ink" android:textSize="20sp" android:textStyle="bold" android:fontFeatureSettings="tnum" />
+    <TextView android:id="@+id/widget_sub" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:textColor="@color/widget_ink3" android:textSize="12sp" />
+</LinearLayout>

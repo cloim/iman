@@ -1,0 +1,93 @@
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+def prop = { String key, String fallback -> (project.findProperty(key) ?: System.getenv(key) ?: fallback).toString() }
+
+android {
+    namespace = "com.cloimism.iman"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.cloimism.iman"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode prop('IMAN_VERSION_CODE', '1').toInteger()
+        versionName prop('IMAN_VERSION_NAME', '0.1.0')
+        buildConfigField 'String', 'API_BASE', "\"${prop('IMAN_API_BASE', 'https://iman.example.com')}\""
+        buildConfigField 'String', 'GOOGLE_WEB_CLIENT_ID', "\"${prop('IMAN_GOOGLE_WEB_CLIENT_ID', '')}\""
+        buildConfigField 'String', 'UPDATE_REPO', "\"${prop('IMAN_UPDATE_REPO', '<owner>/iman')}\""
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildFeatures {
+        buildConfig true
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+    signingConfigs {
+        release {
+            def ks = prop('IMAN_KEYSTORE', '')
+            if (ks) {
+                storeFile file(ks)
+                storePassword prop('IMAN_KEYSTORE_PASSWORD', '')
+                keyAlias prop('IMAN_KEY_ALIAS', 'iman')
+                keyPassword prop('IMAN_KEY_PASSWORD', '')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (prop('IMAN_KEYSTORE', '')) signingConfig signingConfigs.release
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
+    implementation "androidx.work:work-runtime-ktx:2.10.5"
+    implementation "androidx.credentials:credentials:1.5.0"
+    implementation "androidx.credentials:credentials-play-services-auth:1.5.0"
+    implementation "com.google.android.libraries.identity.googleid:googleid:1.1.1"
+    implementation platform("com.google.firebase:firebase-bom:34.4.0")
+    implementation "com.google.firebase:firebase-messaging"
+    testImplementation "org.json:json:20250517"
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

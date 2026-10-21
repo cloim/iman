@@ -1,0 +1,9 @@
+<resources>
+    <color name="colorPrimary">#7EC3A7</color>
+    <color name="colorPrimaryDark">#4F9C7F</color>
+    <color name="colorAccent">#89C7EE</color>
+    <color name="paper">#FEF9ED</color>
+    <color name="widget_bg">#FFFDF7</color>
+    <color name="widget_ink">#3C3E41</color>
+    <color name="widget_ink3">#8C8A84</color>
+</resources>
