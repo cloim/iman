@@ -55,7 +55,7 @@ export function InviteModal({ isOpen, onClose, invite = null, welcome = false }:
       }
     >
       {created ? (
-        <InviteShare url={inviteUrl(created.code)} title="이만, 그룹 초대" text={`${me.data?.group?.name} 그룹에서 함께 쉬어 가요. 초대 코드 ${created.code}`} />
+        <InviteShare url={inviteUrl(created.code)} code={created.code} title="이만, 그룹 초대" text={`${me.data?.group?.name} 그룹에서 함께 쉬어 가요. 초대 코드 ${created.code}`} />
       ) : (
         <div className="grid gap-4">
           {welcome && <p>그룹을 만들었어요. 함께할 사람을 초대해 볼까요?</p>}

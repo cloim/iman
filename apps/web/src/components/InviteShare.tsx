@@ -3,7 +3,7 @@ import QRCode from 'qrcode'
 import { useEffect, useState } from 'react'
 
 /** 링크, QR, 공유 시트(카카오톡 등)로 초대 전달 */
-export function InviteShare({ url, title, text }: { url: string; title: string; text: string }) {
+export function InviteShare({ url, code, title, text }: { url: string; code: string; title: string; text: string }) {
   const [svg, setSvg] = useState('')
   const [copied, setCopied] = useState(false)
   useEffect(() => {
@@ -13,18 +13,21 @@ export function InviteShare({ url, title, text }: { url: string; title: string; 
   return (
     <div className="grid justify-items-center gap-4">
       <div className="qr" aria-label="초대 QR 코드" role="img" dangerouslySetInnerHTML={{ __html: svg }} />
-      <code className="max-w-full rounded-tile bg-surface-2 px-2.5 py-1.5 text-[13px] [overflow-wrap:anywhere]">{url}</code>
+      <div className="grid max-w-full justify-items-center gap-1.5">
+        <span className="text-[13px] text-ink-3">인증코드</span>
+        <code className="max-w-full rounded-tile bg-surface-2 px-3 py-2 text-lg font-semibold tracking-widest [overflow-wrap:anywhere]">{code}</code>
+      </div>
       <div className="flex items-center gap-3">
         <button
           type="button"
           className="btn btn-ghost btn-sm"
           onClick={async () => {
-            await navigator.clipboard.writeText(url)
+            await navigator.clipboard.writeText(code)
             setCopied(true)
             setTimeout(() => setCopied(false), 2000)
           }}
         >
-          <Copy size={16} aria-hidden /> {copied ? '복사했어요' : '링크 복사'}
+          <Copy size={16} aria-hidden /> {copied ? '복사했어요' : '인증코드 복사'}
         </button>
         {canShare && (
           <button type="button" className="btn btn-comma btn-sm" onClick={() => void navigator.share({ title, text, url }).catch(() => {})}>
