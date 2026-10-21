@@ -3,8 +3,9 @@ apply plugin: 'org.jetbrains.kotlin.android'
 
 def prop = { String key, String fallback -> (project.findProperty(key) ?: System.getenv(key) ?: fallback).toString() }
 def signingProps = new Properties()
-def signingFile = file(System.getenv('IMAN_SIGNING_PROPERTIES') ?: '</path/to/signing.properties>')
-if (signingFile.exists()) signingFile.withInputStream { signingProps.load(it) }
+def signingPath = System.getenv('IMAN_SIGNING_PROPERTIES')
+def signingFile = signingPath ? file(signingPath) : null
+if (signingFile?.exists()) signingFile.withInputStream { signingProps.load(it) }
 
 android {
     namespace = "com.cloimism.iman"
@@ -17,7 +18,7 @@ android {
         versionName prop('IMAN_VERSION_NAME', '0.1.0')
         buildConfigField 'String', 'API_BASE', "\"${prop('IMAN_API_BASE', 'https://iman.example.com')}\""
         buildConfigField 'String', 'GOOGLE_WEB_CLIENT_ID', "\"${prop('IMAN_GOOGLE_WEB_CLIENT_ID', '')}\""
-        buildConfigField 'String', 'UPDATE_REPO', "\"${prop('IMAN_UPDATE_REPO', '<owner>/iman')}\""
+        buildConfigField 'String', 'UPDATE_REPO', "\"${prop('IMAN_UPDATE_REPO', 'owner/iman')}\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

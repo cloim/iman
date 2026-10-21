@@ -1,7 +1,7 @@
-// 안드로이드 APK 를 이 PC 에서 서명 빌드하여 GitHub Releases(<owner>/iman)에 올린다.
+// 안드로이드 APK 를 이 PC 에서 서명 빌드하여 GitHub Releases 에 올린다.
 // 사용: pnpm release:android -- --notes "변경 내용" [--dry-run] [--skip-tests]
 // 버전은 루트 package.json 의 version 을 쓴다. 올리기 전에 버전을 먼저 올려 두어야 한다.
-// 서명 키는 저장소 밖 속성 파일(IMAN_SIGNING_PROPERTIES, 기본 </path/to/signing.properties>)에서 읽는다.
+// 운영 값(서명 속성 파일, 릴리스 저장소, 공개 주소, 구글 클라이언트 ID)은 Git 에서 제외된 deploy/.env 에서 읽는다.
 // 앱은 최신 Release 의 latest.json 을 읽어 버전을 비교하고, APK 의 sha256 과 서명 인증서를 확인한 뒤 설치한다.
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -9,7 +9,6 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const REPO = '<owner>/iman'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const web = join(root, 'apps', 'web')
 const android = join(web, 'android')
@@ -23,14 +22,19 @@ const skipTests = args.includes('--skip-tests')
 const notesIndex = args.indexOf('--notes')
 const notes = notesIndex >= 0 ? args[notesIndex + 1] : `이만 ${tag}`
 
-const signing = process.env.IMAN_SIGNING_PROPERTIES ?? '</path/to/signing.properties>'
+const deployEnv = readFileSync(join(root, 'deploy', '.env'), 'utf8')
+const setting = (key) => {
+  const v = process.env[key] ?? new RegExp(`^${key}=(.+)$`, 'm').exec(deployEnv)?.[1]?.trim()
+  if (!v) throw new Error(`deploy/.env 에 ${key} 가 필요합니다.`)
+  return v
+}
+const signing = setting('IMAN_SIGNING_PROPERTIES')
+const REPO = setting('IMAN_RELEASE_REPO')
+const publicOrigin = setting('PUBLIC_ORIGIN')
+const clientId = setting('GOOGLE_WEB_CLIENT_ID')
 if (!existsSync(signing)) throw new Error(`서명 속성 파일이 없습니다: ${signing}`)
 if (!existsSync(join(android, 'app', 'google-services.json'))) throw new Error('apps/web/android/app/google-services.json 이 필요합니다(FCM).')
 
-// 운영 설정의 구글 웹 클라이언트 ID 를 앱 빌드에 넣는다
-const deployEnv = readFileSync(join(root, 'deploy', '.env'), 'utf8')
-const clientId = /^GOOGLE_WEB_CLIENT_ID=(.+)$/m.exec(deployEnv)?.[1]?.trim()
-if (!clientId) throw new Error('deploy/.env 에 GOOGLE_WEB_CLIENT_ID 가 필요합니다.')
 
 // Windows 의 .cmd/.bat(pnpm, npx, gradlew)은 셸이 필요하고, gh 같은 실행 파일은 셸 없이 부른다
 const run = (cmd, cmdArgs, cwd, env = {}, shell = process.platform === 'win32') => {
@@ -52,13 +56,15 @@ if (!skipTests) {
   run('pnpm', ['typecheck'], root)
   run('pnpm', ['test'], root)
 }
-run('pnpm', ['--filter', '@iman/web', 'build'], root)
+run('pnpm', ['--filter', '@iman/web', 'build'], root, { VITE_API_BASE: publicOrigin })
 run('npx', ['cap', 'sync', 'android'], web)
 run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', ['testReleaseUnitTest', 'assembleRelease', '--no-daemon', '-q'], android, {
   IMAN_SIGNING_PROPERTIES: signing,
   IMAN_VERSION_NAME: version,
   IMAN_VERSION_CODE: String(versionCode),
   IMAN_GOOGLE_WEB_CLIENT_ID: clientId,
+  IMAN_API_BASE: publicOrigin,
+  IMAN_UPDATE_REPO: REPO,
 })
 
 const outDir = join(root, 'release')

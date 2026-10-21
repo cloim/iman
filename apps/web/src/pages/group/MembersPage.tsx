@@ -7,7 +7,8 @@ import { DataGrid } from '../../components/DataGrid'
 import { InviteShare } from '../../components/InviteShare'
 import { Modal } from '../../components/Modal'
 import SelectControl from '../../components/SelectControl'
-import { api, errorText } from '../../lib/api'
+import { api, API_BASE, errorText } from '../../lib/api'
+import { isNative } from '../../lib/native'
 import { useMe } from '../../lib/queries'
 import { ROLE_LABEL, VISIBILITY_LABEL, type Role, type Visibility } from '../../lib/types'
 
@@ -32,7 +33,8 @@ interface Invite {
   usedCount?: number
 }
 
-const inviteUrl = (code: string) => `${window.location.origin.replace('https://localhost', 'https://iman.example.com')}/join/${code}`
+// 앱(WebView)의 출처는 https://localhost 이므로 공개 주소(API_BASE)로 초대 링크를 만든다
+const inviteUrl = (code: string) => `${isNative ? API_BASE : window.location.origin}/join/${code}`
 
 export default function MembersPage() {
   useAppBar('구성원')

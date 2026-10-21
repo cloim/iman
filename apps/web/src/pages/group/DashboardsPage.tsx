@@ -5,7 +5,8 @@ import { Link, Navigate, useSearchParams } from 'react-router'
 import { BarActions, useAppBar } from '../../components/AppShell'
 import { Modal } from '../../components/Modal'
 import SelectControl from '../../components/SelectControl'
-import { api, errorText } from '../../lib/api'
+import { api, API_BASE, errorText } from '../../lib/api'
+import { isNative } from '../../lib/native'
 import { useMe } from '../../lib/queries'
 import { VISIBILITY_HINT, VISIBILITY_LABEL, type Dashboard, type Visibility } from '../../lib/types'
 
@@ -17,6 +18,8 @@ interface Kiosk {
   approvedAt: string
   lastSeenAt: string | null
 }
+
+const publicHost = (isNative ? API_BASE : window.location.origin).replace(/^https?:\/\//, '')
 
 const blank = (): Omit<Dashboard, 'id'> & { id?: string } => ({
   name: '거실 보드',
@@ -82,7 +85,7 @@ export default function DashboardsPage() {
           </span>
         </h2>
         <p className="text-[13px] text-ink-3 -mt-2">
-          TV나 태블릿 브라우저에서 <strong>iman.example.com/pair</strong>를 열면 6자리 코드가 보여요. 계정 로그인 없이 이 대시보드만 볼 수 있게 연결돼요.
+          TV나 태블릿 브라우저에서 <strong>{publicHost}/pair</strong>를 열면 6자리 코드가 보여요. 계정 로그인 없이 이 대시보드만 볼 수 있게 연결돼요.
         </p>
         <form
           className="grid items-end gap-2.5 md:grid-cols-[140px_minmax(0,1fr)_minmax(0,1fr)_auto]"
