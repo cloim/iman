@@ -6,5 +6,5 @@
     <string name="widget_small_name">이만, 오늘</string>
     <string name="widget_small_desc">오늘 실제 사용시간과 쉼표 게이지</string>
     <string name="widget_medium_name">이만, 오늘 자세히</string>
-    <string name="widget_medium_desc">쉼표 게이지, 타임라인, 많이 쓴 앱, 이만 쉬기 버튼</string>
+    <string name="widget_medium_desc">오늘 사용시간, 쉼표 게이지, 목표 상태와 화면 켬 횟수</string>
 </resources>

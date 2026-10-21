@@ -88,6 +88,28 @@ class ImanNativePlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getWidgetAppearance(call: PluginCall) {
+        call.resolve(JSObject()
+            .put("backgroundColor", Store.prefs(context).getString("widget.backgroundColor", "#FFFDF7"))
+            .put("transparency", Store.prefs(context).getInt("widget.transparency", 0)))
+    }
+
+    @PluginMethod
+    fun setWidgetAppearance(call: PluginCall) {
+        val color = call.getString("backgroundColor")
+        val transparency = call.getInt("transparency")
+        if (color == null || !Regex("^#[0-9a-fA-F]{6}$").matches(color) || transparency == null || transparency !in 0..100) {
+            call.reject("배경색과 투명도를 확인해 주세요.")
+            return
+        }
+        Store.prefs(context).edit()
+            .putString("widget.backgroundColor", color)
+            .putInt("widget.transparency", transparency).apply()
+        Widgets.updateAll(context)
+        call.resolve()
+    }
+
+    @PluginMethod
     fun requestNotificationPermission(call: PluginCall) {
         if (getPermissionState("notifications") == PermissionState.GRANTED) {
             call.resolve(JSObject().put("granted", true))

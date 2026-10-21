@@ -13,6 +13,7 @@ import { applyTheme, storedTheme, type ThemePref } from '../../lib/theme'
 import { APP_LEVEL_NOTE, ROLE_LABEL, VISIBILITY_HINT, VISIBILITY_LABEL } from '../../lib/types'
 import { DashboardSettings } from './DashboardSettings'
 import { GroupSettings } from './GroupSettings'
+import { WidgetSettings } from './WidgetSettings'
 
 interface Device {
   id: string
@@ -270,7 +271,7 @@ export default function SettingsPage() {
               <p className="text-ink-3">안드로이드 기기에 이만 앱을 설치하고 로그인하면 여기에 나타나요.</p>
             )}
           </section>
-          {isNative ? <NativeSection /> : <AppDownload />}
+          {isNative ? <><NativeSection /><WidgetSettings /></> : <AppDownload />}
         </>
       )}
 

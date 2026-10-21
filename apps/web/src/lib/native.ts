@@ -9,12 +9,19 @@ export interface NativeStatus {
   appVersion: string
 }
 
+export interface WidgetAppearance {
+  backgroundColor: string
+  transparency: number
+}
+
 /** Kotlin 플러그인(ImanNativePlugin) 계약. 리프레시 토큰은 네이티브만 보관한다 */
 export interface ImanNativePlugin {
   signIn(): Promise<{ ok: boolean }>
   signOut(): Promise<void>
   getAccessToken(options?: { force?: boolean }): Promise<{ token: string | null }>
   getStatus(): Promise<NativeStatus>
+  getWidgetAppearance(): Promise<WidgetAppearance>
+  setWidgetAppearance(options: WidgetAppearance): Promise<void>
   openUsageSettings(): Promise<void>
   requestNotificationPermission(): Promise<{ granted: boolean }>
   syncNow(): Promise<{ accepted: number }>

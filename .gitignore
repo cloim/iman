@@ -10,6 +10,7 @@ coverage/
 
 # Android
 apps/web/android/.gradle/
+apps/web/android/.kotlin/
 apps/web/android/build/
 apps/web/android/app/build/
 apps/web/android/local.properties
