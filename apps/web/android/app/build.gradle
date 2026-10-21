@@ -2,6 +2,9 @@ apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
 
 def prop = { String key, String fallback -> (project.findProperty(key) ?: System.getenv(key) ?: fallback).toString() }
+def signingProps = new Properties()
+def signingFile = file(System.getenv('IMAN_SIGNING_PROPERTIES') ?: '</path/to/signing.properties>')
+if (signingFile.exists()) signingFile.withInputStream { signingProps.load(it) }
 
 android {
     namespace = "com.cloimism.iman"
@@ -29,20 +32,20 @@ android {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
     }
+    // 공용 서명 키. 저장소 밖 속성 파일(IMAN_SIGNING_PROPERTIES)에서 읽는다
     signingConfigs {
         release {
-            def ks = prop('IMAN_KEYSTORE', '')
-            if (ks) {
-                storeFile file(ks)
-                storePassword prop('IMAN_KEYSTORE_PASSWORD', '')
-                keyAlias prop('IMAN_KEY_ALIAS', 'iman')
-                keyPassword prop('IMAN_KEY_PASSWORD', '')
+            if (signingProps.STORE_FILE_PATH) {
+                storeFile new File(signingFile.parentFile, new File(signingProps.STORE_FILE_PATH).name)
+                storePassword signingProps.PASSWORD
+                keyAlias signingProps.KEY_ALIAS
+                keyPassword signingProps.PASSWORD
             }
         }
     }
     buildTypes {
         release {
-            if (prop('IMAN_KEYSTORE', '')) signingConfig signingConfigs.release
+            if (signingProps.STORE_FILE_PATH) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

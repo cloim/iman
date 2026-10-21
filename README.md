@@ -44,6 +44,16 @@ docker compose -f compose.yaml up -d --build
 - 로컬 도커 엔진 엔진의 브리지 네트워크는 외부 연결과 컨테이너 간 연결이 막혀 있어 API와 백업 컨테이너는 호스트 네트워크를 씁니다.
 - 백업: 매일 03:30 `deploy/backups`(또는 `BACKUP_DIR`)에 `pg_dump`, 14일 보관. 복원은 `pg_restore --clean -d iman <파일>`.
 
-## 안드로이드 배포
+## 안드로이드 릴리스
 
-`v1.2.3` 태그를 푸시하면 `.github/workflows/release-android.yml`이 서명된 APK와 `latest.json`을 GitHub Release에 올리고, 앱은 설정 화면에서 직접 업데이트합니다. 필요한 Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `GOOGLE_SERVICES_JSON`. Variables: `GOOGLE_WEB_CLIENT_ID`, `MIN_SUPPORTED_VERSION_CODE`.
+이 PC에서 서명 빌드하여 GitHub Releases(`<owner>/iman`)에 올립니다. 루트 `package.json`의 `version`을 올린 뒤 실행합니다.
+
+```bash
+pnpm release:android -- --notes "변경 내용"      # 검증(타입, 테스트), 웹 빌드, cap sync, 서명 APK, 업로드
+pnpm release:android -- --dry-run                 # 업로드 없이 release/ 에 APK 만 생성
+```
+
+- 서명 키는 저장소 밖 속성 파일(`IMAN_SIGNING_PROPERTIES`, 기본 `</path/to/signing.properties>`)의 공용 키를 씁니다.
+- 구글 웹 클라이언트 ID는 `deploy/.env`에서, FCM 설정은 `apps/web/android/app/google-services.json`에서 읽습니다.
+- 릴리스에는 APK와 `latest.json`(버전, sha256)이 올라가고, 앱은 설정 화면에서 이를 확인해 sha256과 서명 인증서가 맞을 때만 설치합니다.
+- 산출물은 `release/`(Git 제외)에 남습니다.

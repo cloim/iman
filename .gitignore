@@ -17,5 +17,8 @@ apps/web/android/app/google-services.json
 *.jks
 *.keystore
 
+# 로컬 릴리스 산출물
+release/
+
 # Local development documents
 docs/

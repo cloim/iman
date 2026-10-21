@@ -1,15 +1,19 @@
 {
   "name": "iman",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.33.2",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev:web": "pnpm --filter @iman/web dev",
     "dev:api": "pnpm --filter @iman/api dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "db:migrate": "pnpm --filter @iman/api migrate"
+    "db:migrate": "pnpm --filter @iman/api migrate",
+    "release:android": "node scripts/release-android.mjs"
   }
 }
