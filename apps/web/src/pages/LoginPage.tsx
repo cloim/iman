@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
+import { AppDownload } from '../components/AppDownload'
 import { Wordmark } from '../components/brand/Comma'
 import { api, errorText } from '../lib/api'
 import { isNative, native } from '../lib/native'
@@ -149,6 +150,7 @@ export default function LoginPage() {
             <button className="btn btn-ghost btn-sm">개발 계정으로 로그인</button>
           </form>
         )}
+        <AppDownload compact />
         <p className="text-[13px] text-ink-3">
           로그인하면 사용 기록은 본인과, 그룹대표가 정한 공개 수준 안에서만 그룹에 공유돼요. <a href="/privacy">개인정보처리방침</a>
         </p>

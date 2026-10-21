@@ -6,7 +6,10 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
-    proxy: { '/api': { target: 'http://127.0.0.1:47211', changeOrigin: false } },
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:47211', changeOrigin: false },
+      '/download': { target: 'http://127.0.0.1:47211', changeOrigin: false },
+    },
   },
   build: {
     rollupOptions: {

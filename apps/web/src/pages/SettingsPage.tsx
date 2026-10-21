@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Download, LogOut, Pencil, Smartphone } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { AppDownload } from '../components/AppDownload'
 import { useAppBar } from '../components/AppShell'
 import { Modal } from '../components/Modal'
 import { api, errorText } from '../lib/api'
@@ -262,7 +263,7 @@ export default function SettingsPage() {
         )}
       </section>
 
-      {isNative && <NativeSection />}
+      {isNative ? <NativeSection /> : <AppDownload />}
 
       <button type="button" className="btn btn-ghost" onClick={logout}>
         <LogOut size={18} aria-hidden /> 로그아웃

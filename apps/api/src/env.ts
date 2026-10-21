@@ -15,6 +15,8 @@ export const env = {
   googleWebClientId: process.env.GOOGLE_WEB_CLIENT_ID ?? '',
   fcmServiceAccount: process.env.FCM_SERVICE_ACCOUNT ?? '',
   webDist: process.env.WEB_DIST ?? '',
+  /** 안드로이드 APK 를 올리는 GitHub 저장소(owner/name). 비우면 앱 다운로드 안내를 숨긴다 */
+  releaseRepo: process.env.IMAN_RELEASE_REPO ?? '',
   /** 개발, 테스트 전용 로그인 허용 */
   devLogin: process.env.NODE_ENV !== 'production' && process.env.DEV_LOGIN === '1',
   production: process.env.NODE_ENV === 'production',

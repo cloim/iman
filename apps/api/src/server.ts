@@ -7,6 +7,7 @@ import Fastify from 'fastify'
 import { pool } from './db'
 import { env } from './env'
 import { HttpError } from './http'
+import { latestAndroidRelease } from './release'
 import authRoutes from './routes/auth'
 import deviceRoutes from './routes/devices'
 import goalRoutes from './routes/goals'
@@ -76,6 +77,20 @@ export async function buildServer() {
     googleWebClientId: env.googleWebClientId || null,
     devLogin: env.devLogin,
   }))
+
+  /** 최신 안드로이드 앱 정보(웹의 앱 받기 안내용) */
+  app.get('/api/app/android', async () => {
+    const r = await latestAndroidRelease()
+    if (!r) return { available: false }
+    return { available: true, versionName: r.versionName, notes: r.notes, downloadPath: '/download/android' }
+  })
+
+  /** 버전이 바뀌어도 그대로인 APK 다운로드 주소 */
+  app.get('/download/android', async (_req, reply) => {
+    const r = await latestAndroidRelease()
+    if (!r) throw new HttpError(404, 'not_found')
+    return reply.header('cache-control', 'no-cache').redirect(r.apkUrl, 302)
+  })
 
   app.get('/api/health', async () => {
     await pool.query('select 1')

@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShieldCheck } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import { AppDownload } from '../components/AppDownload'
 import { Wordmark } from '../components/brand/Comma'
 import { api, ApiError, errorText } from '../lib/api'
 import { useMe } from '../lib/queries'
@@ -97,6 +98,7 @@ export default function JoinPage() {
               </Link>
             ) : null}
             {error && <p className="text-[13px] text-over-ink" role="alert">{error}</p>}
+            <AppDownload compact />
           </>
         )}
       </div>
