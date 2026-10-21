@@ -54,6 +54,8 @@ export interface Today {
   devices: { id: string; name: string; lastSyncedAt: string | null }[]
   rests: { id: string; source: string; startsAt: string; endsAt: string }[]
   goals: (GoalDto & { activeToday: boolean; evaluation: GoalEvaluation })[]
+  /** 관리자가 구성원 내역을 볼 때 적용된 공개 수준. 내 기록에는 없다 */
+  level?: Visibility
 }
 
 export interface BoardMember {
@@ -126,4 +128,7 @@ export const VISIBILITY_HINT: Record<Visibility, string> = {
   app: '카테고리 + 앱별 사용시간',
 }
 
-export const ROLE_LABEL: Record<Role, string> = { leader: '그룹대표', member: '구성원', viewer: '대시보드' }
+/** 앱까지 공개일 때 관리자가 추가로 보는 범위. 공개 수준을 정하거나 확인하는 화면에 함께 안내한다 */
+export const APP_LEVEL_NOTE = '앱까지 공개면 관리자는 언제 어떤 앱을 썼는지 타임라인도 볼 수 있어요.'
+
+export const ROLE_LABEL: Record<Role, string> = { leader: '관리자', member: '구성원', viewer: '대시보드' }

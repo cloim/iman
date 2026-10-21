@@ -74,7 +74,9 @@ export const ERROR_TEXT: Record<string, string> = {
   too_many_attempts: '잠시 후 다시 시도해 주세요.',
   pause_active: '이미 함께 쉬기가 진행 중이에요.',
   pause_ended: '함께 쉬기가 끝났어요.',
-  forbidden_role: '그룹대표만 할 수 있는 작업이에요.',
+  forbidden_role: '관리자만 할 수 있는 작업이에요.',
+  owner_role_fixed: '그룹을 만든 사람은 관리자에서 내리거나 내보낼 수 없어요.',
+  cannot_change_own_role: '내 역할은 다른 관리자가 바꿀 수 있어요.',
   google_not_configured: '구글 로그인 설정이 아직 준비되지 않았어요.',
 }
 
