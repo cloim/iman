@@ -73,11 +73,9 @@ class ImanNativePlugin : Plugin() {
                 .put("signedIn", Api.signedIn(ctx))
                 .put("usagePermission", UsageCollector.hasPermission(ctx))
                 .put("notificationPermission", Notifications.allowed(ctx))
-                .put("installPermission", ctx.packageManager.canRequestPackageInstalls())
                 .put("deviceId", Store.deviceId(ctx))
                 .put("lastSyncAt", Store.lastSyncAt(ctx).takeIf { it > 0 })
-                .put("appVersion", BuildConfig.VERSION_NAME)
-                .put("versionCode", Updater.currentCode(ctx)),
+                .put("appVersion", BuildConfig.VERSION_NAME),
         )
     }
 
@@ -101,12 +99,6 @@ class ImanNativePlugin : Plugin() {
     @PermissionCallback
     private fun notificationCallback(call: PluginCall) {
         call.resolve(JSObject().put("granted", getPermissionState("notifications") == PermissionState.GRANTED))
-    }
-
-    @PluginMethod
-    fun openInstallSettings(call: PluginCall) {
-        activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")))
-        call.resolve()
     }
 
     @PluginMethod
@@ -137,42 +129,6 @@ class ImanNativePlugin : Plugin() {
         scope.launch {
             withContext(Dispatchers.IO) { Rest.end(context, pauseId) }
             call.resolve()
-        }
-    }
-
-    @PluginMethod
-    fun checkUpdate(call: PluginCall) {
-        scope.launch {
-            try {
-                val r = withContext(Dispatchers.IO) { Updater.latest() }
-                val current = Updater.currentCode(context)
-                call.resolve(
-                    JSObject()
-                        .put("available", r.versionCode > current)
-                        .put("versionName", r.versionName)
-                        .put("notes", r.notes)
-                        .put("mandatory", current < r.minSupported),
-                )
-            } catch (e: Throwable) {
-                call.resolve(JSObject().put("available", false).put("versionName", null).put("notes", null).put("mandatory", false))
-            }
-        }
-    }
-
-    @PluginMethod
-    fun installUpdate(call: PluginCall) {
-        scope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    val r = Updater.latest()
-                    Updater.install(context, r) { phase, done, total ->
-                        notifyListeners("updateProgress", JSObject().put("phase", phase).put("downloaded", done).put("total", total))
-                    }
-                }
-                call.resolve()
-            } catch (e: Throwable) {
-                fail(call, e)
-            }
         }
     }
 }

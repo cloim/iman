@@ -54,5 +54,5 @@ pnpm release:android -- --dry-run                 # 업로드 없이 release/ �
 
 - 서명 키는 저장소 밖 속성 파일(`IMAN_SIGNING_PROPERTIES`, `deploy/.env` 에 지정)의 공용 키를 씁니다.
 - 구글 웹 클라이언트 ID는 `deploy/.env`에서, FCM 설정은 `apps/web/android/app/google-services.json`에서 읽습니다.
-- 릴리스에는 APK와 `latest.json`(버전, sha256)이 올라가고, 앱은 설정 화면에서 이를 확인해 sha256과 서명 인증서가 맞을 때만 설치합니다.
+- 릴리스에는 APK와 `latest.json`(버전, sha256)이 올라갑니다. 앱은 켤 때 서버(`/api/app/android`)로 최신 릴리스를 확인해 새 버전이 있으면 알려 주고, "내려받기"를 누르면 GitHub 릴리스 페이지가 열려 그 APK를 지금 앱 위에 설치합니다.
 - 산출물은 `release/`(Git 제외)에 남습니다.

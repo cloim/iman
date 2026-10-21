@@ -78,11 +78,17 @@ export async function buildServer() {
     devLogin: env.devLogin,
   }))
 
-  /** 최신 안드로이드 앱 정보(웹의 앱 받기 안내용) */
+  /** 최신 안드로이드 앱 정보(웹의 앱 받기 안내, 앱 실행 시 새 버전 안내) */
   app.get('/api/app/android', async () => {
     const r = await latestAndroidRelease()
     if (!r) return { available: false }
-    return { available: true, versionName: r.versionName, notes: r.notes, downloadPath: '/download/android' }
+    return {
+      available: true,
+      versionName: r.versionName,
+      notes: r.notes,
+      downloadPath: '/download/android',
+      releaseUrl: `https://github.com/${env.releaseRepo}/releases/latest`,
+    }
   })
 
   /** 버전이 바뀌어도 그대로인 APK 다운로드 주소 */

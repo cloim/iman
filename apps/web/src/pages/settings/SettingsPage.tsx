@@ -6,7 +6,8 @@ import { AppDownload } from '../../components/AppDownload'
 import { useAppBar } from '../../components/AppShell'
 import { Modal } from '../../components/Modal'
 import { api, errorText } from '../../lib/api'
-import { isNative, native, type NativeStatus, type UpdateInfo } from '../../lib/native'
+import { openRelease, useAppUpdate } from '../../lib/appUpdate'
+import { isNative, native, type NativeStatus } from '../../lib/native'
 import { useMe } from '../../lib/queries'
 import { applyTheme, storedTheme, type ThemePref } from '../../lib/theme'
 import { APP_LEVEL_NOTE, ROLE_LABEL, VISIBILITY_HINT, VISIBILITY_LABEL } from '../../lib/types'
@@ -78,41 +79,10 @@ function DeviceRow({ d }: { d: Device }) {
 
 function NativeSection() {
   const [status, setStatus] = useState<NativeStatus | null>(null)
-  const [update, setUpdate] = useState<UpdateInfo | null>(null)
-  const [progress, setProgress] = useState<string>('')
-  const [busy, setBusy] = useState(false)
+  const update = useAppUpdate()
   useEffect(() => {
     void native.getStatus().then(setStatus)
-    const sub = native.addListener('updateProgress', (e) =>
-      setProgress(e.phase === 'download' ? `내려받는 중 ${Math.round((e.downloaded / Math.max(1, e.total)) * 100)}%` : e.phase === 'verify' ? '서명 확인 중' : '설치 화면을 여는 중'),
-    )
-    return () => {
-      void sub.then((h) => h.remove())
-    }
   }, [])
-  const check = async () => {
-    setBusy(true)
-    try {
-      setUpdate(await native.checkUpdate())
-    } finally {
-      setBusy(false)
-    }
-  }
-  const install = async () => {
-    setBusy(true)
-    try {
-      const s = await native.getStatus()
-      if (!s.installPermission) {
-        await native.openInstallSettings()
-        return
-      }
-      await native.installUpdate()
-    } catch (e) {
-      setProgress(e instanceof Error ? e.message : '설치하지 못했어요')
-    } finally {
-      setBusy(false)
-    }
-  }
   if (!status) return <div className="skeleton h-[120px]" />
   return (
     <section className="card grid gap-4">
@@ -141,18 +111,14 @@ function NativeSection() {
         <span>
           앱 버전 <span className="num">{status.appVersion}</span>
         </span>
-        {update?.available ? (
-          <button type="button" className="btn btn-sm btn-comma" onClick={install} disabled={busy}>
-            <Download size={16} aria-hidden /> {update.versionName} 설치
+        {update?.url ? (
+          <button type="button" className="btn btn-sm btn-comma" onClick={() => openRelease(update.url!)}>
+            <Download size={16} aria-hidden /> {update.latest} 내려받기
           </button>
         ) : (
-          <button type="button" className="btn btn-sm btn-ghost" onClick={check} disabled={busy}>
-            {update ? '최신 버전이에요' : '업데이트 확인'}
-          </button>
+          update && <span className="chip chip-met">최신 버전이에요</span>
         )}
       </div>
-      {update?.available && update.notes && <p className="text-[13px] text-ink-3 whitespace-pre-line">{update.notes}</p>}
-      {progress && <p className="text-[13px] text-ink-3" role="status">{progress}</p>}
     </section>
   )
 }

@@ -2,7 +2,9 @@ import { ArrowLeft, CalendarDays, Home, Settings, Users } from 'lucide-react'
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, NavLink, Outlet } from 'react-router'
+import { openRelease, useAppUpdate } from '../lib/appUpdate'
 import { useMe } from '../lib/queries'
+import { Modal } from './Modal'
 import { Wordmark } from './brand/Comma'
 
 interface Bar {
@@ -31,6 +33,41 @@ export function useAppBar(title: string, back?: Bar['back']) {
 export function BarActions({ children }: { children: ReactNode }) {
   const { slot } = useContext(BarContext)
   return slot ? createPortal(children, slot) : null
+}
+
+/** 앱을 켤 때 GitHub 최신 릴리스를 확인해 새 버전이 있으면 한 번 알려 준다 */
+function UpdateNotice() {
+  const update = useAppUpdate()
+  const [closed, setClosed] = useState(false)
+  if (!update?.url || closed) return null
+  return (
+    <Modal
+      isOpen
+      onClose={() => setClosed(true)}
+      title="새 버전이 있어요"
+      size="sm"
+      draggable={false}
+      footer={
+        <>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              openRelease(update.url!)
+              setClosed(true)
+            }}
+          >
+            내려받기
+          </button>
+          <button type="button" className="btn btn-sm" onClick={() => setClosed(true)}>
+            확인
+          </button>
+        </>
+      }
+    >
+      <p>이만 {update.latest} 버전을 내려받을 수 있어요. 설치하면 지금 앱 위에 업데이트돼요.</p>
+    </Modal>
+  )
 }
 
 export function AppShell() {
@@ -101,6 +138,7 @@ export function AppShell() {
           ))}
         </nav>
       </div>
+      <UpdateNotice />
     </BarContext.Provider>
   )
 }
