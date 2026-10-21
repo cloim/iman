@@ -14,6 +14,11 @@ export interface WidgetAppearance {
   transparency: number
 }
 
+export interface RestState {
+  endsAt: number
+  pauseId: string | null
+}
+
 /** Kotlin 플러그인(ImanNativePlugin) 계약. 리프레시 토큰은 네이티브만 보관한다 */
 export interface ImanNativePlugin {
   signIn(): Promise<{ ok: boolean }>
@@ -26,8 +31,9 @@ export interface ImanNativePlugin {
   requestNotificationPermission(): Promise<{ granted: boolean }>
   syncNow(): Promise<{ accepted: number }>
   startRest(options: { minutes: number; source: 'app' | 'group'; pauseId?: string }): Promise<void>
-  /** 그 함께 쉬기로 쉬던 중이면 남은 쉬기를 끝낸다 */
-  endRest(options: { pauseId: string }): Promise<void>
+  getRestState(): Promise<RestState>
+  /** pauseId가 있으면 해당 그룹 쉬기만, 생략하면 개인 쉬기를 취소한다 */
+  endRest(options?: { pauseId: string }): Promise<void>
 }
 
 export const isNative = Capacitor.isNativePlatform()

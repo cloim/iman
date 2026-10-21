@@ -91,6 +91,6 @@ object Store {
     fun clearSession(ctx: Context) {
         putSecret(ctx, "rt", null)
         putSecret(ctx, "at", null)
-        prefs(ctx).edit().remove("atExp").remove("deviceId").remove("today").apply()
+        prefs(ctx).edit().remove("atExp").remove("deviceId").remove("today").remove("restCancellations").apply()
     }
 }

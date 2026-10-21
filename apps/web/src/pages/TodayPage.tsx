@@ -8,9 +8,10 @@ import { TimelineHeatmap } from '../components/brand/TimelineHeatmap'
 import { Devices, Hero, TopApps } from '../components/DaySections'
 import { GoalsModal } from '../components/GoalsModal'
 import { MemberDay, MemberPicker } from '../components/MemberDay'
+import { Modal } from '../components/Modal'
 import { PauseBanner } from '../components/PauseBanner'
 import { isNative, native, type NativeStatus } from '../lib/native'
-import { useBoard, useMe, useToday } from '../lib/queries'
+import { useBoard, useMe, useRestState, useToday } from '../lib/queries'
 
 export default function TodayPage() {
   useAppBar('오늘')
@@ -21,7 +22,10 @@ export default function TodayPage() {
   const [metric, setMetric] = useState<'actual' | 'total'>('actual')
   const [nativeStatus, setNativeStatus] = useState<NativeStatus | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [resting, setResting] = useState(false)
+  const rest = useRestState()
+  const [startingRest, setStartingRest] = useState(false)
+  const [restError, setRestError] = useState('')
+  const resting = (rest.data?.endsAt ?? 0) > Date.now()
   const [goalsOpen, setGoalsOpen] = useState(false)
   const [params, setParams] = useSearchParams()
   const member = params.get('member') ?? ''
@@ -54,9 +58,16 @@ export default function TodayPage() {
   )
 
   const startRest = async () => {
-    await native.startRest({ minutes: 30, source: 'app' })
-    setResting(true)
-    void qc.invalidateQueries({ queryKey: ['today'] })
+    setStartingRest(true)
+    try {
+      await native.startRest({ minutes: 30, source: 'app' })
+      await qc.invalidateQueries({ queryKey: ['native-rest'] })
+      void qc.invalidateQueries({ queryKey: ['today'] })
+    } catch {
+      setRestError('쉬기를 시작하지 못했어요. 다시 시도해 주세요.')
+    } finally {
+      setStartingRest(false)
+    }
   }
 
   return (
@@ -74,6 +85,7 @@ export default function TodayPage() {
             aria-label="이만, 30분 쉬기"
             title="이만, 30분 쉬기"
             onClick={startRest}
+            disabled={startingRest || resting || !rest.data}
           >
             <Coffee size={20} aria-hidden />
           </button>
@@ -108,14 +120,7 @@ export default function TodayPage() {
         />
       )}
 
-      {resting && (
-        <div
-          className="card card-tint flex items-center gap-2.5 px-[18px] py-3.5 font-semibold no-underline animate-comma-drop"
-          role="status"
-        >
-          이만, 쉬어 가요. 30분 뒤에 "잘 쉬었어요" 하고 알려 드릴게요.
-        </div>
-      )}
+      <Modal isOpen={!!restError} onClose={() => setRestError('')} title="쉬기"><p>{restError}</p></Modal>
 
       {member ? (
         <MemberDay key={member} userId={member} />

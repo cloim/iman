@@ -35,6 +35,46 @@ async function login(email: string, name = email.split('@')[0]!) {
   return { token, call, userId: me.body.user.id as string, refreshToken: r.json().refreshToken as string }
 }
 
+describe('개인 쉬기 취소', () => {
+  it('이전 위젯 기록도 취소하며 다른 사용자, 다른 타이머와 그룹 쉬기는 보존한다', async () => {
+    const owner = await login('rest-owner@test.dev')
+    const other = await login('rest-other@test.dev')
+    const now = Date.now()
+    const end = now + 30 * 60_000
+    const cancelled = now - 1_000
+    for (const [startsAt, endsAt, source] of [
+      [now - 60_000, end, 'widget'],
+      [now - 50_000, end + 1_000, 'app'],
+      [now - 40_000, end, 'group'],
+    ] as const) {
+      expect((await owner.call('POST', '/api/me/rests', { startsAt, endsAt, source })).status).toBe(200)
+    }
+    expect((await other.call('POST', '/api/me/rests', { startsAt: now - 60_000, endsAt: end, source: 'widget' })).status).toBe(200)
+    expect((await app.inject({ method: 'POST', url: '/api/me/rests/end', payload: { endsAt: end, cancelledAt: cancelled } })).statusCode).toBe(401)
+    expect((await owner.call('POST', '/api/me/rests/end', { endsAt: end, cancelledAt: end + 1 })).status).toBe(400)
+    expect((await owner.call('POST', '/api/me/rests/end', { endsAt: end, cancelledAt: cancelled })).status).toBe(200)
+    // 같은 취소 요청을 재전송해도 결과가 유지된다.
+    expect((await owner.call('POST', '/api/me/rests/end', { endsAt: end, cancelledAt: cancelled })).status).toBe(200)
+    const records = (await owner.call('GET', '/api/me/today')).body.rests as { source: string; endsAt: string }[]
+    expect(Date.parse(records.find((r) => r.source === 'widget')!.endsAt)).toBe(cancelled)
+    expect(Date.parse(records.find((r) => r.source === 'app')!.endsAt)).toBe(end + 1_000)
+    expect(Date.parse(records.find((r) => r.source === 'group')!.endsAt)).toBe(end)
+    const otherRecords = (await other.call('GET', '/api/me/today')).body.rests as { endsAt: string }[]
+    expect(Date.parse(otherRecords[0]!.endsAt)).toBe(end)
+  })
+
+  it('오프라인 취소를 늦게 재전송해도 실제 취소시각을 보존한다', async () => {
+    const user = await login('rest-offline@test.dev')
+    const end = Date.now() - 60_000
+    const start = end - 30 * 60_000
+    const cancelled = start + 5 * 60_000
+    await user.call('POST', '/api/me/rests', { startsAt: start, endsAt: end, source: 'nudge' })
+    expect((await user.call('POST', '/api/me/rests/end', { endsAt: end, cancelledAt: cancelled })).status).toBe(200)
+    const records = (await user.call('GET', '/api/me/today')).body.rests as { endsAt: string }[]
+    expect(Date.parse(records[0]!.endsAt)).toBe(cancelled)
+  })
+})
+
 describe('SQL 집계가 골든 픽스처와 일치', () => {
   it('usage_totals', async () => {
     const u = await login('golden@test.dev')

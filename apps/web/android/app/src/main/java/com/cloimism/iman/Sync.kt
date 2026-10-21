@@ -68,6 +68,7 @@ object Sync {
     suspend fun run(ctx: Context): Int = mutex.withLock {
         withContext(Dispatchers.IO) {
             if (!Api.signedIn(ctx)) return@withContext 0
+            Rest.flushCancellations(ctx)
             UsageCollector.collect(ctx)
             val deviceId = Store.deviceId(ctx) ?: Device.register(ctx)
             val db = UsageDb.get(ctx)

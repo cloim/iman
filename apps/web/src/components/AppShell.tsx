@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { Link, NavLink, Outlet } from 'react-router'
 import { openRelease, useAppUpdate } from '../lib/appUpdate'
 import { useMe } from '../lib/queries'
+import { RestBanner } from './RestBanner'
 import { Modal } from './Modal'
 import { Wordmark } from './brand/Comma'
 
@@ -118,6 +119,7 @@ export function AppShell() {
             <div className="flex items-center gap-0.5" ref={setSlot} />
           </header>
           <main className="mx-auto max-w-[920px] px-4 pt-1 pb-[calc(96px+env(safe-area-inset-bottom))] md:px-6 md:pt-2 md:pb-12">
+            <RestBanner />
             <Outlet />
           </main>
         </div>

@@ -174,6 +174,22 @@ export default async function meRoutes(app: FastifyInstance) {
     )
     return { ok: true }
   })
+
+  app.post('/api/me/rests/end', async (req) => {
+    const ctx = await requireUser(req)
+    const body = parse(z.object({ endsAt: Ms, cancelledAt: Ms }), req.body)
+    if (body.cancelledAt > body.endsAt) throw new HttpError(400, 'invalid_range')
+    await tx(ctx, (c) => c.query(
+      `UPDATE rests
+          SET ends_at = GREATEST(starts_at, LEAST(ends_at, $3, CURRENT_TIMESTAMP))
+        WHERE user_id = $1
+          AND ends_at = $2
+          AND pause_id IS NULL
+          AND source <> 'group'`,
+      [ctx.userId, new Date(body.endsAt), new Date(body.cancelledAt)],
+    ))
+    return { ok: true }
+  })
 }
 
 export async function weeklyReport(c: Tx, userId: string, weekStart: string) {

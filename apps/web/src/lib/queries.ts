@@ -2,6 +2,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { api, eventsUrl } from './api'
 import type { Board, Me, Today } from './types'
+import { isNative, native } from './native'
+
+export const useRestState = () => useQuery({
+  queryKey: ['native-rest'],
+  queryFn: () => native.getRestState(),
+  enabled: isNative,
+  refetchInterval: 1000,
+  retry: false,
+})
 
 export const useMe = () => useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/api/me'), retry: false, staleTime: 60_000 })
 

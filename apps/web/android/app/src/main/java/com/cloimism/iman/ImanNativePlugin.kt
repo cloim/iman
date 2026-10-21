@@ -146,11 +146,25 @@ class ImanNativePlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getRestState(call: PluginCall) {
+        val endsAt = Store.restUntil(context).takeIf { it > System.currentTimeMillis() } ?: 0L
+        call.resolve(JSObject()
+            .put("endsAt", endsAt)
+            .put("pauseId", if (endsAt > 0) Store.restPause(context) ?: org.json.JSONObject.NULL else org.json.JSONObject.NULL))
+    }
+
+    @PluginMethod
     fun endRest(call: PluginCall) {
         val pauseId = call.getString("pauseId")
         scope.launch {
-            withContext(Dispatchers.IO) { Rest.end(context, pauseId) }
-            call.resolve()
+            try {
+                withContext(Dispatchers.IO) {
+                    if (pauseId != null) Rest.end(context, pauseId) else Rest.cancelPersonal(context)
+                }
+                call.resolve()
+            } catch (e: Throwable) {
+                fail(call, e)
+            }
         }
     }
 }
