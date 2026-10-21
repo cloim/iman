@@ -132,6 +132,15 @@ class ImanNativePlugin : Plugin() {
     }
 
     @PluginMethod
+    fun endRest(call: PluginCall) {
+        val pauseId = call.getString("pauseId")
+        scope.launch {
+            withContext(Dispatchers.IO) { Rest.end(context, pauseId) }
+            call.resolve()
+        }
+    }
+
+    @PluginMethod
     fun checkUpdate(call: PluginCall) {
         scope.launch {
             try {

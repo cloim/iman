@@ -3,7 +3,7 @@ package com.cloimism.iman
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
-/** 서버 푸시: 함께 쉬기 초대, 주간 리포트 */
+/** 서버 푸시: 함께 쉬기 초대와 끝, 주간 리포트 */
 class Messaging : FirebaseMessagingService() {
     override fun onNewToken(token: String) = Device.uploadPushToken(applicationContext, token)
 
@@ -30,6 +30,12 @@ class Messaging : FirebaseMessagingService() {
                             },
                         ),
                 )
+            }
+            // 누군가 함께 쉬기를 일찍 마쳤다: 초대 알림을 지우고, 그 함께 쉬기로 쉬던 중이면 쉬기도 끝낸다
+            "pause_end" -> {
+                val pauseId = data["pauseId"] ?: return
+                Notifications.cancel(ctx, PAUSE_ID)
+                Rest.end(ctx, pauseId)
             }
             "weekly" -> Notifications.show(
                 ctx,

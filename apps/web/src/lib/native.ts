@@ -29,6 +29,8 @@ export interface ImanNativePlugin {
   openInstallSettings(): Promise<void>
   syncNow(): Promise<{ accepted: number }>
   startRest(options: { minutes: number; source: 'app' | 'group'; pauseId?: string }): Promise<void>
+  /** 그 함께 쉬기로 쉬던 중이면 남은 쉬기를 끝낸다 */
+  endRest(options: { pauseId: string }): Promise<void>
   checkUpdate(): Promise<UpdateInfo>
   installUpdate(): Promise<void>
   addListener(

@@ -27,6 +27,7 @@ object Rest {
         val start = System.currentTimeMillis()
         val end = start + minutes * 60_000L
         Store.setRestUntil(ctx, end)
+        Store.setRestPause(ctx, if (source == "group") pauseId else null)
         if (source != "group") {
             runCatching {
                 Api.request(
@@ -57,12 +58,28 @@ object Rest {
         )
         Widgets.updateAll(ctx)
     }
+
+    /**
+     * 함께 쉬기를 일찍 마쳤을 때 남은 쉬기를 끝낸다.
+     * pauseId 를 주면 그 함께 쉬기로 쉬던 중일 때만 끝내서, 혼자 시작한 쉬기는 건드리지 않는다
+     */
+    fun end(ctx: Context, pauseId: String?) {
+        if (pauseId != null && Store.restPause(ctx) != pauseId) return
+        if (System.currentTimeMillis() >= Store.restUntil(ctx)) return
+        Store.setRestUntil(ctx, System.currentTimeMillis())
+        Store.setRestPause(ctx, null)
+        WorkManager.getInstance(ctx).cancelUniqueWork("iman-rest-done")
+        Notifications.cancel(ctx, ONGOING_ID)
+        Notifications.show(ctx, DONE_ID, Notifications.builder(ctx, Notifications.REST, "함께 쉬기를 마쳤어요. 오늘의 쉼표 하나를 찍었어요."))
+        Widgets.updateAll(ctx)
+    }
 }
 
 class RestDoneWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
         val ctx = applicationContext
         Notifications.cancel(ctx, Rest.ONGOING_ID)
+        Store.setRestPause(ctx, null)
         Notifications.show(ctx, Rest.DONE_ID, Notifications.builder(ctx, Notifications.REST, "잘 쉬었어요. 오늘의 쉼표 하나를 찍었어요."))
         Widgets.updateAll(ctx)
         return Result.success()

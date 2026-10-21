@@ -84,6 +84,10 @@ object Store {
     fun restUntil(ctx: Context): Long = prefs(ctx).getLong("restUntil", 0L)
     fun setRestUntil(ctx: Context, v: Long) = prefs(ctx).edit().putLong("restUntil", v).apply()
 
+    /** 지금 쉬고 있는 함께 쉬기 id. 혼자 쉬면 null */
+    fun restPause(ctx: Context): String? = prefs(ctx).getString("restPause", null)
+    fun setRestPause(ctx: Context, v: String?) = prefs(ctx).edit().putString("restPause", v).apply()
+
     fun clearSession(ctx: Context) {
         putSecret(ctx, "rt", null)
         putSecret(ctx, "at", null)

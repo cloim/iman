@@ -24,6 +24,8 @@ export function PauseBanner({ pause, me, isLeader = false }: { pause: NonNullabl
   const end = async () => {
     try {
       await api(`/api/group/pauses/${pause.id}/end`, { method: 'POST' })
+      // 이 휴대폰의 쉬기 타이머도 바로 끈다. 다른 사람 휴대폰은 서버 푸시로 끝난다
+      if (isNative) await native.endRest({ pauseId: pause.id }).catch(() => {})
       await qc.invalidateQueries({ queryKey: ['board'] })
     } catch (e) {
       setError(errorText(e))

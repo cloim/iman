@@ -635,7 +635,7 @@ export default async function groupRoutes(app: FastifyInstance) {
   app.post('/api/group/pauses/:id/end', async (req) => {
     const ctx = await requireUser(req)
     const { id } = parse(z.object({ id: Uuid }), req.params)
-    const groupId = await tx(ctx, async (c) => {
+    const res = await tx(ctx, async (c) => {
       const m = await requireMember(c, ctx.userId, ['leader', 'member'])
       const p = await c.query<{ started_by: string }>(
         'select started_by from pauses where id = $1 and group_id = $2 and ends_at > now()',
@@ -644,13 +644,24 @@ export default async function groupRoutes(app: FastifyInstance) {
       if (!p.rows[0]) throw new HttpError(404, 'pause_ended')
       if (m.role !== 'leader' && p.rows[0].started_by !== ctx.userId) throw new HttpError(403, 'forbidden_role')
       await c.query('update pauses set ends_at = now() where id = $1', [id])
-      return m.groupId
+      const members = await c.query<{ user_id: string }>(
+        `select user_id from group_members where group_id = $1 and role <> 'viewer'`,
+        [m.groupId],
+      )
+      const me = await c.query<{ display_name: string }>('select display_name from users where id = $1', [ctx.userId])
+      return { groupId: m.groupId, members: members.rows.map((r) => r.user_id), ender: me.rows[0]!.display_name }
     })
     // 다른 참여자의 쉬기 기록은 본인 행만 보이므로 권한 확인 뒤 시스템 컨텍스트에서 마감
     await tx({ kind: 'system' }, (c) =>
       c.query('update rests set ends_at = greatest(starts_at, now()) where pause_id = $1 and ends_at > now()', [id]),
     )
-    publish(groupId, { type: 'pause', pauseId: id })
+    publish(res.groupId, { type: 'pause', pauseId: id })
+    // 참여자 휴대폰의 쉬기 타이머와 초대 알림을 끄도록 마친 사람의 다른 기기까지 모두에게 알린다
+    void pushToUsers(res.members, {
+      title: '함께 쉬기',
+      body: `${res.ender}님이 함께 쉬기를 마쳤어요.`,
+      data: { kind: 'pause_end', pauseId: id },
+    }).catch((e) => app.log.warn(e, 'push failed'))
     return { ok: true }
   })
 
