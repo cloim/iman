@@ -15,11 +15,20 @@ export function useCountdown(endsAt: number) {
 }
 
 /** 진행 중인 함께 쉬기 안내와 참여 */
-export function PauseBanner({ pause, me }: { pause: NonNullable<Board['pause']>; me: string }) {
+export function PauseBanner({ pause, me, isLeader = false }: { pause: NonNullable<Board['pause']>; me: string; isLeader?: boolean }) {
   const qc = useQueryClient()
   const left = useCountdown(Date.parse(pause.endsAt))
   const joined = pause.participants.includes(me)
+  const canEnd = isLeader || pause.startedBy === me
   const [error, setError] = useState('')
+  const end = async () => {
+    try {
+      await api(`/api/group/pauses/${pause.id}/end`, { method: 'POST' })
+      await qc.invalidateQueries({ queryKey: ['board'] })
+    } catch (e) {
+      setError(errorText(e))
+    }
+  }
   const join = async () => {
     try {
       await api(`/api/group/pauses/${pause.id}/join`, { method: 'POST' })
@@ -37,13 +46,20 @@ export function PauseBanner({ pause, me }: { pause: NonNullable<Board['pause']>;
       <span>
         함께 쉬는 중, {pause.participants.length}명 참여 <span className="num">{left}</span> 남음
       </span>
-      {joined ? (
-        <span className="chip chip-met animate-comma-drop">참여 중</span>
-      ) : (
-        <button type="button" className="btn btn-comma btn-sm" onClick={join}>
-          함께 쉬기
-        </button>
-      )}
+      <span className="flex items-center gap-2">
+        {joined ? (
+          <span className="chip chip-met animate-comma-drop">참여 중</span>
+        ) : (
+          <button type="button" className="btn btn-comma btn-sm" onClick={join}>
+            함께 쉬기
+          </button>
+        )}
+        {canEnd && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={end}>
+            함께 쉬기 마치기
+          </button>
+        )}
+      </span>
       {error && <span className="text-[13px] text-over-ink">{error}</span>}
     </div>
   )

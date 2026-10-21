@@ -46,7 +46,7 @@ function CreateGroupForm() {
         try {
           await api('/api/groups', { method: 'POST', body: { name, emoji } })
           await qc.invalidateQueries({ queryKey: ['me'] })
-          navigate('/group/members?welcome=1', { replace: true })
+          navigate('/group?invite=welcome', { replace: true })
         } catch (err) {
           setError(errorText(err))
         } finally {
@@ -121,7 +121,7 @@ export default function RolePage() {
           <span className="text-[13px] text-ink-3">한 계정은 한 그룹에만 함께할 수 있어요.</span>
         </p>
         <div className="grid w-full gap-3 text-left">
-          {card('leader', <Crown size={22} aria-hidden />, '그룹대표', '그룹을 만들고 구성원과 대시보드를 관리해요. 내 사용량도 함께 기록돼요.', <CreateGroupForm />)}
+          {card('leader', <Crown size={22} aria-hidden />, '관리자', '그룹을 만들고 구성원과 대시보드를 관리해요. 내 사용량도 함께 기록돼요.', <CreateGroupForm />)}
           {card('member', <UserRound size={22} aria-hidden />, '구성원', '초대받은 그룹에 참여하고 나만의 목표를 세워요.', <CodeForm label="초대 코드" />)}
           {card(
             'viewer',

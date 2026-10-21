@@ -1,19 +1,43 @@
 import { formatDuration } from '@iman/core'
-import { CommaGauge, type CommaStatus } from './brand/Comma'
+import { Bar } from 'react-chartjs-2'
+import { htmlTooltip, useChartColors, type ChartColors } from '../lib/chart'
 import { CATEGORY_LABEL, type BoardMember } from '../lib/types'
+import { CommaGauge } from './brand/Comma'
 
 const BASELINE_MIN = 240
+const METRIC_LABEL = { actual: '실제 사용', total: '총 사용' } as const
 
-function hourSpark(byHour: number[]) {
-  const max = Math.max(1, ...byHour)
-  return byHour.map((v, i) => (
-    <span key={i} style={{ height: `${Math.max(4, (v / max) * 100)}%` }} className={`flex-1 rounded-[1px] ${v ? 'bg-comma' : 'bg-line'}`} />
-  ))
+/** 시간대별 실제 사용 막대. 막대에 올리면 그 시간에 쓴 시간이 보인다 */
+function HourBars({ byHour, c }: { byHour: number[]; c: ChartColors }) {
+  // 쓰지 않은 시간도 얇은 바닥 막대로 그려 하루 24칸의 흐름이 보이게 한다
+  const floor = Math.max(1, ...byHour) * 0.08
+  return (
+    <div className="relative mt-1 h-[26px] w-full min-w-0" role="img" aria-label="시간대별 사용">
+      <Bar
+        data={{ labels: byHour.map((_, h) => h), datasets: [{ data: byHour.map((v) => v || floor), backgroundColor: byHour.map((v) => (v ? c.comma : `color-mix(in srgb, ${c['ink-3']} 30%, transparent)`)), borderRadius: 1, categoryPercentage: 1, barPercentage: 0.8 }] }}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          scales: { x: { display: false }, y: { display: false, beginAtZero: true } },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              enabled: false,
+              external: htmlTooltip,
+              callbacks: { title: (items) => `${items[0]!.dataIndex}시`, label: (item) => `실제 사용 ${formatDuration(byHour[item.dataIndex]!)}` },
+            },
+          },
+        }}
+      />
+    </div>
+  )
 }
 
 /**
  * 그룹 문장: 구성원 이름이 단어처럼 나열되고 이름 뒤에 각자의 쉼표 게이지가 붙는다.
- * 쉬는 사람은 쉼표가 고요히 서 있고, 사용 중인 사람은 하늘색 점이 맥박처럼 뛴다.
+ * 쉬는 사람은 쉼표가 고요히 서 있고, 사용 중인 사람은 하늘색 점이 숨 쉬듯 깜빡인다.
+ * 실제 사용과 총 사용 기준은 게이지, 큰 숫자, 카테고리와 앱 목록에 함께 적용된다.
  */
 export function GroupSentence({
   members,
@@ -28,22 +52,27 @@ export function GroupSentence({
   showHours?: boolean
   pauseParticipants?: string[]
 }) {
+  const c = useChartColors()
   const lg = size === 'lg'
+  const pick = (x: { actualMs: number; totalMs: number }) => (metric === 'actual' ? x.actualMs : x.totalMs)
   return (
-    <ol className={`m-0 flex list-none flex-wrap items-start p-0 ${lg ? 'justify-center gap-x-5 gap-y-7' : 'gap-x-3 gap-y-[18px]'}`} aria-label="구성원 현황">
+    <ol
+      className={`m-0 list-none p-0 ${lg ? 'flex flex-wrap items-start justify-center gap-x-5 gap-y-7' : 'grid grid-cols-[repeat(auto-fill,minmax(min(200px,calc(50%-6px)),1fr))] items-start gap-3'}`}
+      aria-label="구성원 현황"
+    >
       {members.map((m) => {
-        const target = m.goal?.targetMin ?? BASELINE_MIN
-        const status: CommaStatus = m.goal ? m.goal.status : 'none'
-        const value = metric === 'actual' ? m.actualMs : m.totalMs
+        const target = (m.goal?.targetMin ?? BASELINE_MIN) * 60_000
+        const value = pick(m)
         const inPause = pauseParticipants.includes(m.userId)
         const live = m.activeNow && !inPause
         const state = inPause ? '함께 쉬는 중' : m.resting ? '쉬는 중' : m.activeNow ? '지금 사용 중' : '쉬는 중'
         const small = lg ? 'text-sm' : 'text-xs'
+        const details = [...((m.apps ?? m.categories) ?? [])].sort((a, b) => pick(b) - pick(a)).slice(0, 3)
         return (
           <li
             key={m.userId}
-            className={`grid justify-items-center gap-1 rounded-card text-center ${live ? 'shadow-[0_0_0_2px_var(--now)]' : 'shadow-[0_0_0_1px_var(--line)]'} ${
-              lg ? 'w-[196px] bg-surface/80 px-4 pt-[22px] pb-[18px]' : 'w-[calc(50%-6px)] bg-surface px-2.5 pt-3.5 pb-3 sm:w-[136px]'
+            className={`grid grid-cols-[minmax(0,1fr)] justify-items-center gap-1 rounded-card text-center ${live ? 'shadow-[0_0_0_2px_var(--now)]' : 'shadow-[0_0_0_1px_var(--line)]'} ${
+              lg ? 'w-[196px] bg-surface/80 px-4 pt-[22px] pb-[18px]' : 'bg-surface px-4 pt-4 pb-3.5'
             }`}
           >
             <div className="flex max-w-full items-center gap-1.5">
@@ -54,19 +83,22 @@ export function GroupSentence({
               )}
               <span className={`truncate font-display ${lg ? 'text-2xl' : 'text-[17px]'}`}>{m.name}</span>
             </div>
-            <CommaGauge ratio={m.actualMs / (target * 60_000)} status={status} active={live} size={lg ? 96 : 64} label={`${m.name} 실제 사용 ${formatDuration(m.actualMs)}`} />
+            <CommaGauge
+              ratio={value / target}
+              over={!!m.goal && value > target}
+              active={live}
+              size={lg ? 96 : 76}
+              label={`${m.name} ${METRIC_LABEL[metric]} ${formatDuration(value)}`}
+            />
+            <p className={`${small} text-ink-3`}>{METRIC_LABEL[metric]}</p>
             <p className={`num leading-[1.1] ${lg ? 'text-3xl' : 'text-xl'}`}>{formatDuration(value)}</p>
             <p className={`${small} font-semibold ${live ? 'text-[#3a86b5]' : 'text-comma-deep'}`}>{state}</p>
             {m.goal && <p className={`${small} text-ink-3`}>목표 {formatDuration(m.goal.targetMin * 60_000)}</p>}
-            {showHours && m.byHour.length > 0 && (
-              <div className="mt-1 flex h-[22px] w-full items-end gap-px" aria-hidden>
-                {hourSpark(m.byHour)}
-              </div>
-            )}
-            {(m.apps ?? m.categories)?.slice(0, 3).map((x) => (
+            {showHours && m.byHour.length > 0 && <HourBars byHour={m.byHour} c={c} />}
+            {details.map((x) => (
               <p key={x.key} className={`flex w-full justify-between gap-1.5 ${small} text-ink-2`}>
                 <span className="truncate">{m.apps ? x.label : (CATEGORY_LABEL[x.key] ?? x.key)}</span>
-                <span className="num">{formatDuration(x.actualMs)}</span>
+                <span className="num">{formatDuration(pick(x))}</span>
               </p>
             ))}
           </li>

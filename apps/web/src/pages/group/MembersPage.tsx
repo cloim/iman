@@ -1,14 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2, UserPlus } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Navigate, useSearchParams } from 'react-router'
+import { Navigate } from 'react-router'
 import { BarActions, useAppBar } from '../../components/AppShell'
 import { DataGrid } from '../../components/DataGrid'
-import { InviteShare } from '../../components/InviteShare'
+import { InviteModal, type Invite } from '../../components/InviteModal'
 import { Modal } from '../../components/Modal'
 import SelectControl from '../../components/SelectControl'
-import { api, API_BASE, errorText } from '../../lib/api'
-import { isNative } from '../../lib/native'
+import { api, errorText } from '../../lib/api'
 import { useMe } from '../../lib/queries'
 import { ROLE_LABEL, VISIBILITY_LABEL, type Role, type Visibility } from '../../lib/types'
 
@@ -24,27 +23,14 @@ interface Member {
   lastSyncedAt: string | null
 }
 
-interface Invite {
-  id: string
-  code: string
-  role: 'member' | 'viewer'
-  expiresAt: string
-  maxUses: number
-  usedCount?: number
-}
-
-// 앱(WebView)의 출처는 https://localhost 이므로 공개 주소(API_BASE)로 초대 링크를 만든다
-const inviteUrl = (code: string) => `${isNative ? API_BASE : window.location.origin}/join/${code}`
+const FIT_COLUMNS = ['name', 'roleLabel', 'visibilityLabel', 'devices', 'synced']
 
 export default function MembersPage() {
-  useAppBar('구성원')
   const me = useMe()
+  useAppBar('구성원', { to: '/group', label: me.data?.group ? `${me.data.group.emoji} ${me.data.group.name}` : '그룹' })
   const qc = useQueryClient()
-  const [params, setParams] = useSearchParams()
-  const [inviteOpen, setInviteOpen] = useState(params.get('welcome') === '1')
-  const [created, setCreated] = useState<Invite | null>(null)
-  const [inviteRole, setInviteRole] = useState<'member' | 'viewer'>('member')
-  const [maxUses, setMaxUses] = useState(5)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [sharing, setSharing] = useState<Invite | null>(null)
   const [editing, setEditing] = useState<Member | null>(null)
   const [confirmRemove, setConfirmRemove] = useState(false)
 
@@ -52,13 +38,6 @@ export default function MembersPage() {
   const invites = useQuery({ queryKey: ['invites'], queryFn: () => api<{ invites: Invite[] }>('/api/group/invites') })
   const group = me.data?.group
 
-  const createInvite = useMutation({
-    mutationFn: () => api<Invite>('/api/group/invites', { method: 'POST', body: { role: inviteRole, maxUses, ttlHours: 72 } }),
-    onSuccess: (inv) => {
-      setCreated(inv)
-      void qc.invalidateQueries({ queryKey: ['invites'] })
-    },
-  })
   const revokeInvite = useMutation({
     mutationFn: (id: string) => api(`/api/group/invites/${id}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['invites'] }),
@@ -70,7 +49,7 @@ export default function MembersPage() {
         body: {
           nickname: m.nickname,
           visibilityOverride: m.visibilityOverride,
-          ...(m.userId !== me.data?.user.id && m.role !== 'leader' ? { role: m.role } : {}),
+          ...(m.userId !== me.data?.user.id && m.userId !== group?.ownerId ? { role: m.role } : {}),
         },
       }),
     onSuccess: () => {
@@ -90,11 +69,13 @@ export default function MembersPage() {
 
   const columns = useMemo(
     () => [
-      { field: 'name', headerName: '이름', flex: 2, minWidth: 140 },
-      { field: 'roleLabel', headerName: '역할', width: 110, filterable: true },
-      { field: 'visibilityLabel', headerName: '공개 수준', width: 150, filterable: true },
-      { field: 'devices', headerName: '기기', width: 80 },
-      { field: 'synced', headerName: '마지막 동기화', flex: 1, minWidth: 140 },
+      { field: 'name', headerName: '이름' },
+      { field: 'roleLabel', headerName: '역할', filterable: true },
+      { field: 'visibilityLabel', headerName: '공개 수준', filterable: true },
+      { field: 'devices', headerName: '기기' },
+      { field: 'synced', headerName: '마지막 동기화' },
+      // 값 길이에 맞춘 열들 뒤의 남는 폭을 채우는 빈 열
+      { field: 'fill', headerName: '', flex: 1, minWidth: 0, sortable: false },
     ],
     [],
   )
@@ -130,11 +111,11 @@ export default function MembersPage() {
                   <code className="num">{i.code}</code> <span className="chip">{ROLE_LABEL[i.role]}</span>
                   <span className="text-[13px] text-ink-3">
                     {' '}
-                    {i.usedCount ?? 0}/{i.maxUses}명, {new Date(i.expiresAt).toLocaleDateString('ko-KR')}까지
+                    {i.usedCount ?? 0}명 참여, {new Date(i.expiresAt).toLocaleDateString('ko-KR')}까지
                   </span>
                 </span>
                 <span className="flex items-center gap-[2px]">
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCreated(i)}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSharing(i)}>
                     공유
                   </button>
                   <button type="button" className="icon-btn" aria-label="초대 취소" onClick={() => revokeInvite.mutate(i.id)}>
@@ -156,51 +137,19 @@ export default function MembersPage() {
           isLoading={members.isPending}
           errorMessage={members.error ? errorText(members.error) : ''}
           emptyMessage="아직 구성원이 없어요."
+          autoSizeStrategy={{ type: 'fitCellContents', colIds: FIT_COLUMNS }}
+          onRowDataUpdated={(e: { api: { autoSizeColumns: (ids: string[]) => void } }) => e.api.autoSizeColumns(FIT_COLUMNS)}
         />
       </section>
 
-      <Modal
-        isOpen={inviteOpen || !!created}
+      <InviteModal
+        isOpen={inviteOpen || !!sharing}
+        invite={sharing}
         onClose={() => {
           setInviteOpen(false)
-          setCreated(null)
-          if (params.get('welcome')) setParams({}, { replace: true })
+          setSharing(null)
         }}
-        title={created ? '초대를 보내 주세요' : '구성원 초대'}
-        size="sm"
-        footer={
-          created ? undefined : (
-            <button type="button" className="btn btn-comma btn-sm" onClick={() => createInvite.mutate()} disabled={createInvite.isPending}>
-              초대 만들기
-            </button>
-          )
-        }
-      >
-        {created ? (
-          <InviteShare
-            url={inviteUrl(created.code)}
-            title="이만, 그룹 초대"
-            text={`${group?.name} 그룹에서 함께 쉬어 가요. 초대 코드 ${created.code}`}
-          />
-        ) : (
-          <div className="grid gap-4">
-            {params.get('welcome') && <p>그룹을 만들었어요. 함께할 사람을 초대해 볼까요?</p>}
-            <label className="field">
-              <span>초대 역할</span>
-              <SelectControl value={inviteRole} onChange={(e) => setInviteRole(e.target.value as 'member' | 'viewer')}>
-                <option value="member">구성원: 사용량을 기록하고 목표를 세워요</option>
-                <option value="viewer">대시보드: 그룹 현황 화면만 봐요</option>
-              </SelectControl>
-            </label>
-            <label className="field">
-              <span>몇 명까지 쓸 수 있나요</span>
-              <input type="number" className="input num" min={1} max={50} value={maxUses} onChange={(e) => setMaxUses(Number(e.target.value))} />
-              <span className="text-[13px] text-ink-3">초대는 3일 동안 유효해요.</span>
-            </label>
-            {createInvite.error && <p className="text-[13px] text-over-ink">{errorText(createInvite.error)}</p>}
-          </div>
-        )}
-      </Modal>
+      />
 
       <Modal
         isOpen={!!editing}
@@ -209,7 +158,7 @@ export default function MembersPage() {
         size="sm"
         footer={
           <>
-            {editing && editing.userId !== me.data?.user.id && (
+            {editing && editing.userId !== me.data?.user.id && editing.userId !== group?.ownerId && (
               <button type="button" className="btn btn-danger btn-sm mr-auto" onClick={() => setConfirmRemove(true)}>
                 내보내기
               </button>
@@ -230,12 +179,17 @@ export default function MembersPage() {
               <span>그룹에서 부를 이름</span>
               <input className="input" value={editing.nickname ?? ''} placeholder={editing.displayName} maxLength={20} onChange={(e) => setEditing({ ...editing, nickname: e.target.value || null })} />
             </label>
-            {editing.role !== 'leader' && (
+            {editing.userId === group?.ownerId ? (
+              <p className="text-[13px] text-ink-3">그룹을 만든 사람이라 항상 관리자예요.</p>
+            ) : editing.userId === me.data?.user.id ? (
+              <p className="text-[13px] text-ink-3">내 역할은 다른 관리자가 바꿀 수 있어요.</p>
+            ) : (
               <label className="field">
                 <span>역할</span>
                 <SelectControl value={editing.role} onChange={(e) => setEditing({ ...editing, role: e.target.value as Role })}>
-                  <option value="member">구성원</option>
-                  <option value="viewer">대시보드</option>
+                  <option value="leader">관리자: 구성원, 대시보드, 그룹 설정을 관리하고 구성원 내역을 봐요</option>
+                  <option value="member">구성원: 사용량을 기록하고 목표를 세워요</option>
+                  <option value="viewer">대시보드: 그룹 현황 화면만 봐요</option>
                 </SelectControl>
               </label>
             )}
