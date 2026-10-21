@@ -15,6 +15,7 @@ import {
 } from '../membership'
 import { pushToUsers } from '../push'
 import { publish, subscribe } from '../realtime'
+import { daysReport, todayReport, weeklyReport } from './me'
 
 const Uuid = z.string().uuid()
 const VisibilityEnum = z.enum(['summary', 'category', 'app'])
@@ -36,7 +37,7 @@ interface RollupRow {
 }
 
 /**
- * 그룹 현황 보드. 공개 수준(그룹대표 정책, 대시보드 표시 수준)에 맞춰 세부 항목을 걸러 낸다.
+ * 그룹 현황 보드. 공개 수준(관리자 정책, 대시보드 표시 수준)에 맞춰 세부 항목을 걸러 낸다.
  * 본인 카드는 항상 전체 공개
  */
 export async function buildBoard(
@@ -135,7 +136,8 @@ export async function buildBoard(
       totalMs: r?.total_ms ?? 0,
       actualMs: r?.actual_ms ?? 0,
       pickups: r?.pickups ?? 0,
-      byHour: r?.by_hour ?? [],
+      // bigint[] 는 pg 드라이버가 문자열 배열로 넘기므로 숫자로 바꿔 보낸다
+      byHour: (r?.by_hour ?? []).map(Number),
       goal: g ? { targetMin: g.target, status: g.status ?? 'met' } : null,
       categories: level === 'summary' ? null : top(r?.by_category, (k) => k),
       apps: level === 'app' ? top(r?.by_app, (k) => labelBy[k] ?? k) : null,
@@ -153,6 +155,9 @@ export async function buildBoard(
     members,
   }
 }
+
+const ownerOf = async (c: Tx, groupId: string) =>
+  (await c.query<{ owner_id: string }>('select owner_id from groups where id = $1', [groupId])).rows[0]?.owner_id
 
 async function loadDashboard(c: Tx, id: string) {
   const r = await c.query(
@@ -214,12 +219,12 @@ export default async function groupRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
-  /** 그룹 삭제(그룹대표) 또는 탈퇴(그 외) */
+  /** 그룹 삭제(그룹을 만든 사람) 또는 탈퇴(다른 관리자와 구성원) */
   app.post('/api/group/leave', async (req) => {
     const ctx = await requireUser(req)
     const groupId = await tx({ kind: 'system' }, async (c) => {
       const m = await requireMember(c, ctx.userId)
-      if (m.role === 'leader') await c.query('delete from groups where id = $1', [m.groupId])
+      if ((await ownerOf(c, m.groupId)) === ctx.userId) await c.query('delete from groups where id = $1', [m.groupId])
       else await c.query('delete from group_members where user_id = $1', [ctx.userId])
       return m.groupId
     })
@@ -250,7 +255,7 @@ export default async function groupRoutes(app: FastifyInstance) {
     const { userId } = parse(z.object({ userId: Uuid }), req.params)
     const b = parse(
       z.object({
-        role: z.enum(['member', 'viewer']).optional(),
+        role: z.enum(['leader', 'member', 'viewer']).optional(),
         nickname: z.string().trim().max(20).nullable().optional(),
         visibilityOverride: VisibilityEnum.nullable().optional(),
       }),
@@ -259,6 +264,8 @@ export default async function groupRoutes(app: FastifyInstance) {
     const groupId = await tx(ctx, async (c) => {
       const m = await requireMember(c, ctx.userId, ['leader'])
       if (userId === ctx.userId && b.role) throw new HttpError(400, 'cannot_change_own_role')
+      // 그룹을 만든 사람은 항상 관리자로 남는다
+      if (b.role && userId === (await ownerOf(c, m.groupId))) throw new HttpError(400, 'owner_role_fixed')
       const r = await c.query(
         `update group_members set
            role = coalesce($3, role),
@@ -274,12 +281,71 @@ export default async function groupRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
+  /** 관리자인지와 대상이 같은 그룹의 구성원인지 확인하고, 대상에게 적용된 공개 수준을 돌려준다(본인은 전부) */
+  const memberLevel = (ctx: { kind: 'user'; userId: string }, userId: string) =>
+    tx(ctx, async (c): Promise<Visibility> => {
+      const m = await requireMember(c, ctx.userId, ['leader'])
+      const t = await c.query<{ role: Role }>('select role from group_members where user_id = $1 and group_id = $2', [userId, m.groupId])
+      if (!t.rows[0] || t.rows[0].role === 'viewer') throw new HttpError(404, 'not_found')
+      return userId === ctx.userId ? 'app' : ((await effectiveVisibilityOf(c, userId)) ?? 'summary')
+    })
+  const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+
+  // 관리자가 구성원의 내역을 본다. 원본 기록은 본인 행만 보이므로 권한과 공개 수준을 확인한 뒤
+  // 시스템 컨텍스트에서 읽고, 그 구성원에게 적용된 공개 수준만큼만 걸러 보낸다
+  // (요약만: 총량과 시간대, 카테고리까지: + 카테고리별, 앱까지: + 앱별, 타임라인, 기기)
+  app.get('/api/group/members/:userId/day', async (req) => {
+    const ctx = await requireUser(req)
+    const { userId } = parse(z.object({ userId: Uuid }), req.params)
+    const q = parse(z.object({ date: DateStr.optional() }), req.query)
+    const lv = await memberLevel(ctx, userId)
+    const d = await tx({ kind: 'system' }, (c) => todayReport(c, userId, q.date))
+    const app = lv === 'app'
+    return {
+      ...d,
+      level: lv,
+      byApp: app ? d.byApp : {},
+      apps: app ? d.apps : {},
+      sessions: app ? d.sessions : [],
+      byDevice: app ? d.byDevice : {},
+      devices: app ? d.devices : [],
+      byCategory: lv === 'summary' ? {} : d.byCategory,
+      // 하루 사용 목표만 공개하고, 앱이나 카테고리 이름이 드러나는 목표와 넛지 설정은 뺀다
+      goals: d.goals.filter((g) => g.type === 'daily_actual').map((g) => ({ ...g, nudge: undefined })),
+    }
+  })
+
+  /** 기록 캘린더: 하루 총량과 하루 사용 목표 판정은 요약 수준이라 공개 수준과 상관없이 보인다 */
+  app.get('/api/group/members/:userId/days', async (req) => {
+    const ctx = await requireUser(req)
+    const { userId } = parse(z.object({ userId: Uuid }), req.params)
+    const q = parse(z.object({ from: DateStr, to: DateStr }), req.query)
+    await memberLevel(ctx, userId)
+    const d = await tx({ kind: 'system' }, (c) => daysReport(c, userId, q.from, q.to))
+    return {
+      days: d.days.map(({ date, totalMs, actualMs }: { date: string; totalMs: number; actualMs: number }) => ({ date, totalMs, actualMs })),
+      goalResults: d.goalResults.filter((r: { type: string }) => r.type === 'daily_actual'),
+      rests: d.rests,
+    }
+  })
+
+  /** 주간 리포트: 가장 늘어난 앱은 앱까지 공개일 때만 */
+  app.get('/api/group/members/:userId/weekly', async (req) => {
+    const ctx = await requireUser(req)
+    const { userId } = parse(z.object({ userId: Uuid }), req.params)
+    const q = parse(z.object({ weekStart: DateStr }), req.query)
+    const lv = await memberLevel(ctx, userId)
+    const w = await tx({ kind: 'system' }, (c) => weeklyReport(c, userId, q.weekStart))
+    return { ...w, topIncrease: lv === 'app' ? w.topIncrease : null }
+  })
+
   app.delete('/api/group/members/:userId', async (req) => {
     const ctx = await requireUser(req)
     const { userId } = parse(z.object({ userId: Uuid }), req.params)
     const groupId = await tx(ctx, async (c) => {
       const m = await requireMember(c, ctx.userId, ['leader'])
       if (userId === ctx.userId) throw new HttpError(400, 'cannot_remove_self')
+      if (userId === (await ownerOf(c, m.groupId))) throw new HttpError(400, 'owner_role_fixed')
       await c.query('delete from group_members where user_id = $1 and group_id = $2', [userId, m.groupId])
       return m.groupId
     })
@@ -308,7 +374,8 @@ export default async function groupRoutes(app: FastifyInstance) {
       z.object({
         role: z.enum(['member', 'viewer']).default('member'),
         email: z.string().email().optional(),
-        maxUses: z.number().int().min(1).max(50).default(1),
+        // 화면에서는 인원 제한 없이 만들고, 유효 기간으로만 초대를 닫는다
+        maxUses: z.number().int().min(1).max(10_000).default(10_000),
         ttlHours: z.number().int().min(1).max(24 * 14).default(72),
       }),
       req.body,
@@ -443,7 +510,7 @@ export default async function groupRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
-  // ── 키오스크 승인과 해제(그룹대표) ──
+  // ── 키오스크 승인과 해제(관리자) ──
   app.get('/api/group/kiosks', async (req) => {
     const ctx = await requireUser(req)
     const groupId = await tx(ctx, async (c) => (await requireMember(c, ctx.userId, ['leader'])).groupId)
@@ -560,6 +627,29 @@ export default async function groupRoutes(app: FastifyInstance) {
       )
       return m.groupId
     })
+    publish(groupId, { type: 'pause', pauseId: id })
+    return { ok: true }
+  })
+
+  /** 함께 쉬기 일찍 마치기: 시작한 사람이나 관리자만. 참여자들의 쉬기 기록도 지금 시각에서 끝낸다 */
+  app.post('/api/group/pauses/:id/end', async (req) => {
+    const ctx = await requireUser(req)
+    const { id } = parse(z.object({ id: Uuid }), req.params)
+    const groupId = await tx(ctx, async (c) => {
+      const m = await requireMember(c, ctx.userId, ['leader', 'member'])
+      const p = await c.query<{ started_by: string }>(
+        'select started_by from pauses where id = $1 and group_id = $2 and ends_at > now()',
+        [id, m.groupId],
+      )
+      if (!p.rows[0]) throw new HttpError(404, 'pause_ended')
+      if (m.role !== 'leader' && p.rows[0].started_by !== ctx.userId) throw new HttpError(403, 'forbidden_role')
+      await c.query('update pauses set ends_at = now() where id = $1', [id])
+      return m.groupId
+    })
+    // 다른 참여자의 쉬기 기록은 본인 행만 보이므로 권한 확인 뒤 시스템 컨텍스트에서 마감
+    await tx({ kind: 'system' }, (c) =>
+      c.query('update rests set ends_at = greatest(starts_at, now()) where pause_id = $1 and ends_at > now()', [id]),
+    )
     publish(groupId, { type: 'pause', pauseId: id })
     return { ok: true }
   })

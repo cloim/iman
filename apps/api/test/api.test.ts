@@ -176,12 +176,41 @@ describe('그룹, 수집, 공개 수준, 키오스크', () => {
     expect(card.level).toBe('category')
     expect(card.categories.map((c: { key: string }) => c.key).sort()).toEqual(['social', 'video'])
     expect(card.apps).toBeNull()
+    // 관리자가 보는 구성원 하루 내역도 같은 공개 수준만큼만
+    let day = await leader.call('GET', `/api/group/members/${member.userId}/day`)
+    expect(day.body.level).toBe('category')
+    expect(Math.round(day.body.actualMs / 60_000)).toBe(26)
+    expect(Object.keys(day.body.byCategory).sort()).toEqual(['social', 'video'])
+    expect(day.body.sessions).toEqual([])
+    expect(day.body.byApp).toEqual({})
+    // 기록 캘린더와 주간 리포트도 볼 수 있고, 가장 늘어난 앱은 앱까지 공개일 때만
+    const memberDays = await leader.call('GET', `/api/group/members/${member.userId}/days?from=${day.body.date}&to=${day.body.date}`)
+    expect(memberDays.body.days).toHaveLength(1)
+    expect(memberDays.body.days[0].byCategory).toBeUndefined()
+    let memberWeek = await leader.call('GET', `/api/group/members/${member.userId}/weekly?weekStart=${day.body.date}`)
+    expect(memberWeek.body.days[0].actualMs).toBe(day.body.actualMs)
+    expect(memberWeek.body.topIncrease).toBeNull()
+    // 구성원은 다른 사람의 내역을 볼 수 없다
+    expect((await member.call('GET', `/api/group/members/${leader.userId}/day`)).status).toBe(403)
 
     // 그룹대표가 앱까지 공개로 바꾸면 앱 이름이 보인다
     expect((await leader.call('PATCH', '/api/group', { visibility: 'app' })).status).toBe(200)
     board = await leader.call('GET', '/api/board')
     card = board.body.members.find((m: { userId: string }) => m.userId === member.userId)
     expect(card.apps.map((a: { label: string }) => a.label)).toEqual(['YouTube', '카카오톡'])
+    day = await leader.call('GET', `/api/group/members/${member.userId}/day`)
+    expect(day.body.sessions).toHaveLength(3)
+    expect(day.body.apps['com.kakao.talk'].label).toBe('카카오톡')
+    memberWeek = await leader.call('GET', `/api/group/members/${member.userId}/weekly?weekStart=${day.body.date}`)
+    expect(memberWeek.body.topIncrease.label).toBeTruthy()
+    expect((await member.call('GET', `/api/group/members/${leader.userId}/weekly?weekStart=${day.body.date}`)).status).toBe(403)
+
+    // 관리자는 구성원을 관리자로 올릴 수 있고, 그룹을 만든 사람의 역할은 바뀌지 않는다
+    expect((await leader.call('PATCH', `/api/group/members/${member.userId}`, { role: 'leader' })).status).toBe(200)
+    expect((await member.call('PATCH', `/api/group/members/${leader.userId}`, { role: 'member' })).body.error).toBe('owner_role_fixed')
+    expect((await member.call('DELETE', `/api/group/members/${leader.userId}`)).body.error).toBe('owner_role_fixed')
+    expect((await member.call('GET', `/api/group/members/${leader.userId}/day`)).status).toBe(200)
+    expect((await leader.call('PATCH', `/api/group/members/${member.userId}`, { role: 'member' })).status).toBe(200)
 
     // 바깥 사람은 보드를 볼 수 없다
     expect((await outsider.call('GET', '/api/board')).status).toBe(403)
@@ -214,11 +243,25 @@ describe('그룹, 수집, 공개 수준, 키오스크', () => {
     expect((await leader.call('POST', `/api/group/pauses/${pause.body.id}/join`)).status).toBe(200)
     board = await leader.call('GET', '/api/board')
     expect(board.body.pause.participants.sort()).toEqual([leader.userId, member.userId].sort())
+    expect(board.body.members.flatMap((m: { byHour: unknown[] }) => m.byHour).every((v: unknown) => typeof v === 'number')).toBe(true)
+    // 일찍 마치면 보드에서 사라지고 다시 시작할 수 있다
+    expect((await leader.call('POST', `/api/group/pauses/${pause.body.id}/end`)).status).toBe(200)
+    board = await leader.call('GET', '/api/board')
+    expect(board.body.pause).toBeNull()
+    expect((await member.call('POST', `/api/group/pauses/${pause.body.id}/end`)).status).toBe(404)
 
     // 목표와 판정
     const goal = await member.call('POST', '/api/me/goals', { type: 'daily_actual', target: 30 })
     expect(goal.status).toBe(200)
     const t2 = await member.call('GET', '/api/me/today')
     expect(t2.body.goals[0].evaluation.status).toBe('near')
+
+    // 주간 리포트: 일자별 실제 사용과 평균
+    const weekly = await member.call('GET', `/api/me/weekly?weekStart=${t2.body.date}`)
+    expect(weekly.status).toBe(200)
+    expect(weekly.body.days).toHaveLength(7)
+    expect(weekly.body.days[0]).toMatchObject({ date: t2.body.date, actualMs: t2.body.actualMs, goal: { status: 'near', targetMin: 30 } })
+    expect(weekly.body.avgActualMs).toBe(t2.body.actualMs)
+    expect(weekly.body.goalDaysMet).toBe(1)
   })
 })

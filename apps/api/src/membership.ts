@@ -30,7 +30,7 @@ export async function userTimeZone(c: Tx, userId: string): Promise<string> {
   return r.rows[0]?.timezone ?? 'Asia/Seoul'
 }
 
-/** 그룹 시간대는 그룹대표(소유자)의 시간대를 따른다 */
+/** 그룹 시간대는 그룹을 만든 사람(소유자)의 시간대를 따른다 */
 export async function groupTimeZone(c: Tx, groupId: string): Promise<string> {
   const r = await c.query<{ timezone: string }>(
     'select u.timezone from groups g join users u on u.id = g.owner_id where g.id = $1',

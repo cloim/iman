@@ -7,6 +7,7 @@ import {
   hourBoundaries,
   isGoalActiveOn,
   localDateOf,
+  overlapLength,
   summarize,
   unionIntervals,
   type Interval,
@@ -42,6 +43,8 @@ export default async function meRoutes(app: FastifyInstance) {
          from users where id = $1`,
         [ctx.userId],
       )
+      // 토큰은 유효하지만 이 DB에 없는 사용자(다른 DB에서 발급, 삭제된 계정)는 다시 로그인하게 한다
+      if (!u.rows[0]) throw new HttpError(401, 'unauthenticated')
       const m = await membership(c, ctx.userId)
       let group = null
       if (m) {
@@ -129,90 +132,17 @@ export default async function meRoutes(app: FastifyInstance) {
     })
   })
 
-  /** 오늘 홈: 실시간 집계, 시간대 분포, 목표 판정, 쉬기 기록 */
+  /** 오늘 홈 */
   app.get('/api/me/today', async (req) => {
     const ctx = await requireUser(req)
     const q = parse(z.object({ date: DateStr.optional() }), req.query)
-    return tx(ctx, async (c) => {
-      const tz = await userTimeZone(c, ctx.userId)
-      const now = Date.now()
-      const date = q.date ?? localDateOf(now, tz)
-      const [from, to] = dayRange(date, tz)
-      const sessions = await loadSessions(c, ctx.userId, from, to)
-      const cats = await categoryMap(c, [...new Set(sessions.map((s) => s.packageName))])
-      const s = summarize(sessions, { from, to, now }, (p) => cats.get(p) ?? 'other')
-      const goals = await c.query(
-        `select id, type, target, scope_ref, days_of_week, quiet_from, quiet_to, nudge from goals
-         where user_id = $1 and active order by created_at`,
-        [ctx.userId],
-      )
-      const rests = await c.query(
-        `select id, source, starts_at as "startsAt", ends_at as "endsAt" from rests
-         where user_id = $1 and starts_at < $3 and ends_at > $2 order by starts_at`,
-        [ctx.userId, new Date(from), new Date(to)],
-      )
-      const devices = await c.query(
-        `select id, coalesce(alias, model) as name, last_synced_at as "lastSyncedAt" from devices
-         where user_id = $1 and active order by created_at`,
-        [ctx.userId],
-      )
-      return {
-        date,
-        timeZone: tz,
-        dayStart: from,
-        dayEnd: to,
-        now,
-        totalMs: s.totalMs,
-        actualMs: s.actualMs,
-        overlapMs: s.overlapMs,
-        pickups: s.pickups,
-        activeNow: sessions.some((x) => x.endedAt === null),
-        byApp: s.byApp,
-        byDevice: s.byDevice,
-        byCategory: s.byCategory,
-        byHour: bucketize(s.union, hourBoundaries(from, to)),
-        sessions,
-        apps: await appLabels(c, Object.keys(s.byApp)),
-        devices: devices.rows,
-        rests: rests.rows,
-        goals: goals.rows.map((g) => {
-          const goal = toGoal(g)
-          return {
-            ...goal,
-            nudge: g.nudge,
-            active: true,
-            activeToday: isGoalActiveOn(goal, date),
-            evaluation: evaluateGoal(goal, s, date, tz),
-          }
-        }),
-      }
-    })
+    return tx(ctx, (c) => todayReport(c, ctx.userId, q.date))
   })
 
   app.get('/api/me/days', async (req) => {
     const ctx = await requireUser(req)
     const q = parse(z.object({ from: DateStr, to: DateStr }), req.query)
-    return tx(ctx, async (c) => {
-      const days = await c.query(
-        `select local_date as date, total_ms as "totalMs", actual_ms as "actualMs", pickups,
-                by_category as "byCategory", by_hour as "byHour"
-         from daily_rollups where user_id = $1 and local_date between $2 and $3 order by local_date`,
-        [ctx.userId, q.from, q.to],
-      )
-      const results = await c.query(
-        `select r.local_date as date, r.status, r.value, g.type, g.target
-         from goal_results r join goals g on g.id = r.goal_id
-         where g.user_id = $1 and r.local_date between $2 and $3`,
-        [ctx.userId, q.from, q.to],
-      )
-      const rests = await c.query<{ d: string; n: number }>(
-        `select (starts_at at time zone u.timezone)::date::text as d, count(*)::int as n
-         from rests r join users u on u.id = r.user_id
-         where r.user_id = $1 and (starts_at at time zone u.timezone)::date between $2 and $3 group by 1`,
-        [ctx.userId, q.from, q.to],
-      )
-      return { days: days.rows, goalResults: results.rows, rests: Object.fromEntries(rests.rows.map((r) => [r.d, r.n])) }
-    })
+    return tx(ctx, (c) => daysReport(c, ctx.userId, q.from, q.to))
   })
 
   /** 주간 쉼표 리포트: 지난주 대비 변화, 가장 늘어난 앱, 가장 길게 쉰 구간, 쉼표 횟수 */
@@ -286,11 +216,25 @@ export async function weeklyReport(c: Tx, userId: string, weekStart: string) {
     'select count(*)::int as n from rests where user_id = $1 and starts_at >= $2 and starts_at < $3',
     [userId, new Date(thisFrom), new Date(to)],
   )
-  const met = await c.query<{ n: number }>(
-    `select count(*)::int as n from goal_results r join goals g on g.id = r.goal_id
-     where g.user_id = $1 and g.type = 'daily_actual' and r.status <> 'over' and r.local_date between $2 and $3`,
+  const results = await c.query<{ date: string; status: 'met' | 'near' | 'over'; target: number }>(
+    `select r.local_date::text as date, r.status, g.target from goal_results r join goals g on g.id = r.goal_id
+     where g.user_id = $1 and g.type = 'daily_actual' and r.local_date between $2 and $3`,
     [userId, weekStart, addDays(weekStart, 6)],
   )
+  const resultBy = new Map(results.rows.map((r) => [r.date, r]))
+
+  // 일자별 실제 사용. 평균은 이번 주에서 오늘까지 지난 날 수로 나눈다
+  const today = localDateOf(now, tz)
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(weekStart, i)
+    const r = resultBy.get(date)
+    return {
+      date,
+      actualMs: overlapLength(cur.union, [dayRange(date, tz)]),
+      goal: r ? { status: r.status, targetMin: r.target } : null,
+    }
+  })
+  const elapsed = days.filter((d) => d.date <= today).length
   return {
     weekStart,
     actualMs: cur.actualMs,
@@ -300,6 +244,87 @@ export async function weeklyReport(c: Tx, userId: string, weekStart: string) {
     topIncrease: topIncrease && { ...topIncrease, ...(await appLabels(c, [topIncrease.packageName]))[topIncrease.packageName] },
     longestBreak,
     rests: rests.rows[0]!.n,
-    goalDaysMet: met.rows[0]!.n,
+    goalDaysMet: results.rows.filter((r) => r.status !== 'over').length,
+    days,
+    avgActualMs: elapsed > 0 ? Math.round(cur.actualMs / elapsed) : 0,
   }
+}
+
+/** 하루 집계: 실시간 집계, 시간대 분포, 목표 판정, 쉬기 기록. 날짜를 비우면 그 사용자의 오늘 */
+export async function todayReport(c: Tx, userId: string, day?: string) {
+  const tz = await userTimeZone(c, userId)
+  const now = Date.now()
+  const date = day ?? localDateOf(now, tz)
+  const [from, to] = dayRange(date, tz)
+  const sessions = await loadSessions(c, userId, from, to)
+  const cats = await categoryMap(c, [...new Set(sessions.map((s) => s.packageName))])
+  const s = summarize(sessions, { from, to, now }, (p) => cats.get(p) ?? 'other')
+  const goals = await c.query(
+    `select id, type, target, scope_ref, days_of_week, quiet_from, quiet_to, nudge from goals
+     where user_id = $1 and active order by created_at`,
+    [userId],
+  )
+  const rests = await c.query(
+    `select id, source, starts_at as "startsAt", ends_at as "endsAt" from rests
+     where user_id = $1 and starts_at < $3 and ends_at > $2 order by starts_at`,
+    [userId, new Date(from), new Date(to)],
+  )
+  const devices = await c.query(
+    `select id, coalesce(alias, model) as name, last_synced_at as "lastSyncedAt" from devices
+     where user_id = $1 and active order by created_at`,
+    [userId],
+  )
+  return {
+    date,
+    timeZone: tz,
+    dayStart: from,
+    dayEnd: to,
+    now,
+    totalMs: s.totalMs,
+    actualMs: s.actualMs,
+    overlapMs: s.overlapMs,
+    pickups: s.pickups,
+    activeNow: sessions.some((x) => x.endedAt === null),
+    byApp: s.byApp,
+    byDevice: s.byDevice,
+    byCategory: s.byCategory,
+    byHour: bucketize(s.union, hourBoundaries(from, to)),
+    sessions,
+    apps: await appLabels(c, Object.keys(s.byApp)),
+    devices: devices.rows,
+    rests: rests.rows,
+    goals: goals.rows.map((g) => {
+      const goal = toGoal(g)
+      return {
+        ...goal,
+        nudge: g.nudge,
+        active: true,
+        activeToday: isGoalActiveOn(goal, date),
+        evaluation: evaluateGoal(goal, s, date, tz),
+      }
+    }),
+  }
+}
+
+/** 날짜 범위의 하루 집계, 목표 판정, 쉬기 횟수(기록 캘린더용) */
+export async function daysReport(c: Tx, userId: string, from: string, to: string) {
+  const days = await c.query(
+    `select local_date as date, total_ms as "totalMs", actual_ms as "actualMs", pickups,
+            by_category as "byCategory", by_hour as "byHour"
+     from daily_rollups where user_id = $1 and local_date between $2 and $3 order by local_date`,
+    [userId, from, to],
+  )
+  const results = await c.query(
+    `select r.local_date as date, r.status, r.value, g.type, g.target
+     from goal_results r join goals g on g.id = r.goal_id
+     where g.user_id = $1 and r.local_date between $2 and $3`,
+    [userId, from, to],
+  )
+  const rests = await c.query<{ d: string; n: number }>(
+    `select (starts_at at time zone u.timezone)::date::text as d, count(*)::int as n
+     from rests r join users u on u.id = r.user_id
+     where r.user_id = $1 and (starts_at at time zone u.timezone)::date between $2 and $3 group by 1`,
+    [userId, from, to],
+  )
+  return { days: days.rows, goalResults: results.rows, rests: Object.fromEntries(rests.rows.map((r) => [r.d, r.n])) }
 }
