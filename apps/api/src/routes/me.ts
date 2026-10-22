@@ -4,6 +4,7 @@ import {
   bucketize,
   dayRange,
   evaluateGoal,
+  isGoalType,
   hourBoundaries,
   isGoalActiveOn,
   localDateOf,
@@ -327,14 +328,14 @@ export async function todayReport(c: Tx, userId: string, day?: string) {
     apps: await appLabels(c, Object.keys(s.byApp)),
     devices: devices.rows,
     rests: rests.rows,
-    goals: goals.rows.map((g) => {
+    goals: goals.rows.filter((g) => isGoalType(g.type)).map((g) => {
       const goal = toGoal(g)
       return {
         ...goal,
         nudge: g.nudge,
         active: true,
         activeToday: isGoalActiveOn(goal, date),
-        evaluation: evaluateGoal(goal, s, date, tz),
+        evaluation: evaluateGoal(goal, s),
       }
     }),
   }
@@ -360,5 +361,5 @@ export async function daysReport(c: Tx, userId: string, from: string, to: string
      where r.user_id = $1 and (starts_at at time zone u.timezone)::date between $2 and $3 group by 1`,
     [userId, from, to],
   )
-  return { days: days.rows, goalResults: results.rows, rests: Object.fromEntries(rests.rows.map((r) => [r.d, r.n])) }
+  return { days: days.rows, goalResults: results.rows.filter((r) => isGoalType(r.type)), rests: Object.fromEntries(rests.rows.map((r) => [r.d, r.n])) }
 }

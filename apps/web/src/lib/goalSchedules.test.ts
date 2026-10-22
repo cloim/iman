@@ -20,7 +20,7 @@ describe('요일 묶음별 목표', () => {
   })
 
   it('다른 종류와 다른 앱은 같은 요일에도 설정한다', () => {
-    expect(hasOverlappingGoals([goal(127), goal(127, { type: 'pickups' })])).toBe(false)
+    expect(hasOverlappingGoals([goal(127), goal(127, { type: 'category_limit', scopeRef: 'video' })])).toBe(false)
     const app = { type: 'app_limit' as const, scopeRef: 'com.example.video' }
     expect(hasOverlappingGoals([goal(31, app), goal(96, app)])).toBe(false)
     expect(hasOverlappingGoals([goal(31, app), goal(1, app)])).toBe(true)

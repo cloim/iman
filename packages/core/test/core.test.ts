@@ -8,7 +8,7 @@ import {
   isGoalActiveOn,
   localDateOf,
   localDatesBetween,
-  quietIntervals,
+  isGoalType,
   summarize,
   weekdayOf,
   type Goal,
@@ -63,22 +63,22 @@ describe('집계 세부', () => {
 })
 
 describe('목표 판정', () => {
-  const base: Goal = { id: 'g', type: 'daily_actual', target: 60, scopeRef: null, daysOfWeek: 0b1111111, quietFrom: null, quietTo: null }
+  const base: Goal = { id: 'g', type: 'daily_actual', target: 60, scopeRef: null, daysOfWeek: 0b1111111 }
   const w = { from: t('2026-10-20T00:00:00+09:00'), to: t('2026-10-21T00:00:00+09:00'), now: t('2026-10-21T09:00:00+09:00') }
   const make = (start: string, end: string) =>
     summarize([{ deviceId: 'p', packageName: 'a', startedAt: t(start), endedAt: t(end) }], w)
 
   it('80% 이상은 근접, 초과는 over', () => {
-    expect(evaluateGoal(base, make('2026-10-20T10:00:00+09:00', '2026-10-20T10:30:00+09:00'), '2026-10-20', TZ).status).toBe('met')
-    expect(evaluateGoal(base, make('2026-10-20T10:00:00+09:00', '2026-10-20T10:50:00+09:00'), '2026-10-20', TZ).status).toBe('near')
-    expect(evaluateGoal(base, make('2026-10-20T10:00:00+09:00', '2026-10-20T11:10:00+09:00'), '2026-10-20', TZ).status).toBe('over')
+    expect(evaluateGoal(base, make('2026-10-20T10:00:00+09:00', '2026-10-20T10:30:00+09:00')).status).toBe('met')
+    expect(evaluateGoal(base, make('2026-10-20T10:00:00+09:00', '2026-10-20T10:50:00+09:00')).status).toBe('near')
+    expect(evaluateGoal(base, make('2026-10-20T10:00:00+09:00', '2026-10-20T11:10:00+09:00')).status).toBe('over')
   })
-  it('자정을 넘는 쉬는 시간대', () => {
-    const q = quietIntervals('2026-10-20', '22:00', '07:00', TZ)
-    expect(q).toHaveLength(2)
-    const goal: Goal = { ...base, type: 'quiet_hours', target: 0, quietFrom: '22:00', quietTo: '07:00' }
-    expect(evaluateGoal(goal, make('2026-10-20T06:59:30+09:00', '2026-10-20T07:30:00+09:00'), '2026-10-20', TZ).status).toBe('met')
-    expect(evaluateGoal(goal, make('2026-10-20T22:30:00+09:00', '2026-10-20T22:45:00+09:00'), '2026-10-20', TZ).status).toBe('over')
+  it('사용시간 목표만 지원한다', () => {
+    expect(isGoalType('daily_actual')).toBe(true)
+    expect(isGoalType('app_limit')).toBe(true)
+    expect(isGoalType('category_limit')).toBe(true)
+    expect(isGoalType('pickups')).toBe(false)
+    expect(isGoalType('quiet_hours')).toBe(false)
   })
   it('요일 비트마스크', () => {
     expect(isGoalActiveOn({ daysOfWeek: 0b0011111 }, '2026-10-24')).toBe(false)

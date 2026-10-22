@@ -148,6 +148,35 @@ describe('인증', () => {
 })
 
 describe('요일별 목표', () => {
+  it('제거한 목표의 신규 저장을 거절하고 기존 목표를 현재 결과에서 제외한다', async () => {
+    const user = await login('retired-goals@test.dev')
+    await user.call('POST', '/api/groups', { name: '목표 정리' })
+    for (const type of ['pickups', 'quiet_hours']) {
+      const res = await user.call('POST', '/api/me/goals', { type, target: 10, quietFrom: '22:00', quietTo: '07:00' })
+      expect(res.status).toBe(400)
+    }
+    const legacy = await tx({ kind: 'user', userId: user.userId }, (db) => db.query(
+      `INSERT INTO goals (user_id, type, target, days_of_week, active)
+       VALUES ($1, 'pickups', 60, 127, 'true'), ($1, 'quiet_hours', 0, 127, 'true')
+       RETURNING id`, [user.userId],
+    ))
+    const today = await user.call('GET', '/api/me/today')
+    expect(today.body.goals).toEqual([])
+    expect((await user.call('GET', '/api/me/goals')).body.goals).toEqual([])
+    expect((await user.call('PUT', `/api/me/goals/${legacy.rows[0]!.id}`, { type: 'pickups', target: 60 })).status).toBe(400)
+    // 일반 목표 저장에 따른 재집계도 보관 중인 두 목표를 다시 판정하지 않는다.
+    await user.call('POST', '/api/me/goals', { type: 'daily_actual', target: 120 })
+    const days = await user.call('GET', `/api/me/days?from=${today.body.date}&to=${today.body.date}`)
+    expect(days.body.goalResults.every((g: { type: string }) => g.type === 'daily_actual')).toBe(true)
+    const { readFile } = await import('node:fs/promises')
+    const migration = await readFile(new URL('../../../db/migrations/006_retire_unused_goals.sql', import.meta.url), 'utf8')
+    await tx({ kind: 'user', userId: user.userId }, async (db) => {
+      await db.query(migration)
+      const archived = await db.query('SELECT active FROM goals WHERE id = ANY($1)', [legacy.rows.map((g) => g.id)])
+      expect(archived.rows.map((g) => g.active)).toEqual([false, false])
+    })
+  })
+
   it('그룹 카드와 오늘 판정은 오늘 적용되는 목표만 사용한다', async () => {
     const user = await login('weekday-goal@test.dev')
     await user.call('POST', '/api/groups', { name: '요일별 목표' })

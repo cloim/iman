@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * 넛지: 앱을 막지 않고 알맞은 때에 부드럽게 알린다. 판정은 기기 안에서 하므로 오프라인에서도 동작.
- * - 목표 80%(근접), 100%(도달), 앱과 카테고리 한도, 쉬는 시간대, 60분 연속 사용
+ * - 목표 80%(근접), 100%(도달), 앱과 카테고리 한도, 60분 연속 사용
  * - 같은 종류는 하루 한 번, 하루 최대 4번
  * - 계속 사용 중이면 목표에 닿는 예상 시각에 한 번 더 확인하도록 예약
  */
@@ -104,10 +104,6 @@ object Nudge {
                         send("$id:near", "${name} 한도까지 ${formatDuration(limit - value)} 남았어요.")
                     }
                 }
-                "quiet_hours" -> if (status == "over") {
-                    send("$id:over", if (warm) "지금은 쉬기로 한 시간이에요. 내일을 위해 이만 내려놓을까요?" else "쉬는 시간대에 사용 중이에요.")
-                }
-                "pickups" -> if (status == "over") send("$id:over", "오늘 화면을 ${value}번 켰어요. 목표는 ${limit}번이에요.")
             }
         }
 

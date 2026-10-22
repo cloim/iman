@@ -35,8 +35,6 @@ export interface GoalDto {
   target: number
   scopeRef: string | null
   daysOfWeek: number
-  quietFrom: string | null
-  quietTo: string | null
   nudge: { enabled: boolean; near: boolean; tone: 'plain' | 'warm' }
   active: boolean
 }

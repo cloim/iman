@@ -15,12 +15,10 @@ const TABS: { type: GoalType; label: string; hint: string }[] = [
   { type: 'daily_actual', label: '하루 사용', hint: '동시 실행을 한 번만 센 하루 실제 사용시간의 한도예요.' },
   { type: 'app_limit', label: '앱별', hint: '앱마다 하루에 쓸 시간을 정해요.' },
   { type: 'category_limit', label: '카테고리별', hint: '영상, SNS 같은 카테고리마다 하루 한도를 정해요.' },
-  { type: 'quiet_hours', label: '쉬는 시간대', hint: '이 시간대에는 쓰지 않거나 정한 시간만 써요.' },
-  { type: 'pickups', label: '화면 켜기', hint: '하루에 화면을 켜는 횟수의 한도예요.' },
 ]
 const MULTI: GoalType[] = ['app_limit', 'category_limit']
 const DAYS = ['월', '화', '수', '목', '금', '토', '일']
-const DEFAULT_TARGET: Record<GoalType, number> = { daily_actual: 180, app_limit: 60, category_limit: 60, quiet_hours: 0, pickups: 60 }
+const DEFAULT_TARGET: Record<GoalType, number> = { daily_actual: 180, app_limit: 60, category_limit: 60 }
 
 let seq = 0
 const blank = (type: GoalType): Draft => ({
@@ -29,8 +27,6 @@ const blank = (type: GoalType): Draft => ({
   target: DEFAULT_TARGET[type],
   scopeRef: null,
   daysOfWeek: 127,
-  quietFrom: type === 'quiet_hours' ? '22:00' : null,
-  quietTo: type === 'quiet_hours' ? '07:00' : null,
   nudge: { enabled: true, near: true, tone: 'warm' },
   active: true,
 })
@@ -122,8 +118,7 @@ export function GoalsModal({ isOpen, onClose, today }: { isOpen: boolean; onClos
   const overlapping = hasOverlappingGoals(drafts)
   const invalid = overlapping || drafts.some((d) =>
     (MULTI.includes(d.type) && !d.scopeRef) || !Number.isInteger(d.target) ||
-    d.target < (d.type === 'pickups' ? 1 : 0) || d.target > 1440 ||
-    (d.type === 'quiet_hours' && (!d.quietFrom || !d.quietTo)),
+    d.target < 0 || d.target > 1440,
   )
   const dirty = drafts.length !== original.length || drafts.some((d) => !d.id || !same(d, original.find((g) => g.id === d.id)!))
 
@@ -164,26 +159,7 @@ export function GoalsModal({ isOpen, onClose, today }: { isOpen: boolean; onClos
         </div>
         {on && (
           <>
-            {t === 'quiet_hours' && (
-              <div className="flex items-center gap-3">
-                <label className="field flex-1">
-                  <span>시작</span>
-                  <input type="time" className="input num" value={d.quietFrom ?? ''} onChange={(e) => update({ ...d, quietFrom: e.target.value })} />
-                </label>
-                <label className="field flex-1">
-                  <span>끝</span>
-                  <input type="time" className="input num" value={d.quietTo ?? ''} onChange={(e) => update({ ...d, quietTo: e.target.value })} />
-                </label>
-              </div>
-            )}
-            {t === 'pickups' ? (
-              <label className="field">
-                <span>하루 한도(번)</span>
-                <input type="number" className="input num" min={1} max={1440} value={d.target} onChange={(e) => update({ ...d, target: Number(e.target.value) })} />
-              </label>
-            ) : (
-              <Minutes label={t === 'quiet_hours' ? '그 시간에 허용할 사용(분)' : '하루 한도(분)'} value={d.target} onChange={(v) => update({ ...d, target: v })} />
-            )}
+            <Minutes label="하루 한도(분)" value={d.target} onChange={(v) => update({ ...d, target: v })} />
             <Days value={d.daysOfWeek} onChange={(v) => update({ ...d, daysOfWeek: v })} />
             <Nudge draft={d} set={update} />
           </>

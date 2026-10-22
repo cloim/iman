@@ -4,6 +4,7 @@ import {
   evaluateGoal,
   hourBoundaries,
   isGoalActiveOn,
+  isGoalType,
   summarize,
   type Goal,
   type LocalDate,
@@ -27,8 +28,6 @@ export const toGoal = (g: GoalRow): Goal => ({
   target: g.target,
   scopeRef: g.scope_ref,
   daysOfWeek: g.days_of_week,
-  quietFrom: g.quiet_from,
-  quietTo: g.quiet_to,
 })
 
 /** 집계용 세션. 관리자가 정한 예외 앱은 원본에 남기고 여기서 뺀다 */
@@ -85,9 +84,10 @@ export async function refreshRollup(c: Tx, userId: string, timeZone: string, dat
     [userId, date],
   )
   for (const row of goals.rows) {
+    if (!isGoalType(row.type)) continue
     const goal = toGoal(row)
     if (row.active && !isGoalActiveOn(goal, date)) continue
-    const ev = evaluateGoal(goal, s, date, timeZone)
+    const ev = evaluateGoal(goal, s)
     await c.query(
       `insert into goal_results (goal_id, local_date, status, value) values ($1, $2, $3, $4)
        on conflict (goal_id, local_date) do update set status = excluded.status, value = excluded.value`,

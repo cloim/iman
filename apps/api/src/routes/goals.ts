@@ -1,4 +1,4 @@
-import { localDateOf } from '@iman/core'
+import { GOAL_TYPES, isGoalType, localDateOf } from '@iman/core'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { requireUser } from '../auth'
@@ -7,16 +7,12 @@ import { HttpError, parse } from '../http'
 import { userTimeZone } from '../membership'
 import { refreshRollup } from '../rollup'
 
-const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
-
 const GoalBody = z
   .object({
-    type: z.enum(['daily_actual', 'app_limit', 'category_limit', 'quiet_hours', 'pickups']),
+    type: z.enum(GOAL_TYPES),
     target: z.number().int().min(0).max(24 * 60),
     scopeRef: z.string().max(200).nullable().default(null),
     daysOfWeek: z.number().int().min(1).max(127).default(127),
-    quietFrom: HHMM.nullable().default(null),
-    quietTo: HHMM.nullable().default(null),
     nudge: z
       .object({
         enabled: z.boolean(),
@@ -27,7 +23,6 @@ const GoalBody = z
     active: z.boolean().default(true),
   })
   .refine((g) => (g.type === 'app_limit' || g.type === 'category_limit' ? !!g.scopeRef : true))
-  .refine((g) => (g.type === 'quiet_hours' ? !!g.quietFrom && !!g.quietTo : true))
 
 const columns = `id, type, target, scope_ref as "scopeRef", days_of_week as "daysOfWeek",
   quiet_from as "quietFrom", quiet_to as "quietTo", nudge, active`
@@ -36,7 +31,7 @@ export default async function goalRoutes(app: FastifyInstance) {
   app.get('/api/me/goals', async (req) => {
     const ctx = await requireUser(req)
     return tx(ctx, async (c) => ({
-      goals: (await c.query(`select ${columns} from goals where user_id = $1 order by created_at`, [ctx.userId])).rows,
+      goals: (await c.query(`select ${columns} from goals where user_id = $1 order by created_at`, [ctx.userId])).rows.filter((g) => isGoalType(g.type)),
     }))
   })
 
@@ -54,7 +49,7 @@ export default async function goalRoutes(app: FastifyInstance) {
       const r = await c.query(
         `insert into goals (user_id, type, target, scope_ref, days_of_week, quiet_from, quiet_to, nudge, active)
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning ${columns}`,
-        [ctx.userId, g.type, g.target, g.scopeRef, g.daysOfWeek, g.quietFrom, g.quietTo, g.nudge, g.active],
+        [ctx.userId, g.type, g.target, g.scopeRef, g.daysOfWeek, null, null, g.nudge, g.active],
       )
       await refreshToday(c, ctx.userId)
       return r.rows[0]
@@ -70,7 +65,7 @@ export default async function goalRoutes(app: FastifyInstance) {
         `update goals set type = $3, target = $4, scope_ref = $5, days_of_week = $6, quiet_from = $7,
            quiet_to = $8, nudge = $9, active = $10
          where id = $1 and user_id = $2 returning ${columns}`,
-        [id, ctx.userId, g.type, g.target, g.scopeRef, g.daysOfWeek, g.quietFrom, g.quietTo, g.nudge, g.active],
+        [id, ctx.userId, g.type, g.target, g.scopeRef, g.daysOfWeek, null, null, g.nudge, g.active],
       )
       if (!r.rows[0]) throw new HttpError(404, 'not_found')
       await c.query('delete from goal_results where goal_id = $1 and local_date >= current_date - 1', [id])
