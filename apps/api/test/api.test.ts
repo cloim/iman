@@ -147,6 +147,27 @@ describe('인증', () => {
   })
 })
 
+describe('요일별 목표', () => {
+  it('그룹 카드와 오늘 판정은 오늘 적용되는 목표만 사용한다', async () => {
+    const user = await login('weekday-goal@test.dev')
+    await user.call('POST', '/api/groups', { name: '요일별 목표' })
+    const today = await user.call('GET', '/api/me/today')
+    const weekday = (new Date(`${today.body.date}T12:00:00Z`).getUTCDay() + 6) % 7
+    const daysOfWeek = 1 << weekday
+    const current = await user.call('POST', '/api/me/goals', { type: 'daily_actual', target: 120, daysOfWeek })
+    expect(current.status).toBe(200)
+    // 나중에 저장한 다른 요일 목표가 오늘 목표를 덮어쓰지 않아야 한다.
+    await user.call('POST', '/api/me/goals', { type: 'daily_actual', target: 240, daysOfWeek: 127 ^ daysOfWeek })
+    const board = await user.call('GET', '/api/board')
+    expect(board.body.members.find((m: { userId: string }) => m.userId === user.userId).goal.targetMin).toBe(120)
+    const report = await user.call('GET', '/api/me/today')
+    expect(report.body.goals.filter((g: { activeToday: boolean }) => g.activeToday).map((g: { target: number }) => g.target)).toEqual([120])
+    await user.call('DELETE', `/api/me/goals/${current.body.id}`)
+    const withoutToday = await user.call('GET', '/api/board')
+    expect(withoutToday.body.members.find((m: { userId: string }) => m.userId === user.userId).goal).toBeNull()
+  })
+})
+
 describe('예외 앱', () => {
   it('공통과 구성원별 예외 앱을 과거 기록까지 집계에서 빼고, 풀리면 원래대로 돌아온다', async () => {
     const leader = await login('ex-leader@test.dev')

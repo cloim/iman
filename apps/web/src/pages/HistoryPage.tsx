@@ -273,7 +273,7 @@ export default function HistoryPage() {
   const now = useToday()
   const goalMin = member
     ? null
-    : (now.data?.goals.find((g) => g.type === 'daily_actual' && g.active)?.target ?? null)
+    : (now.data?.goals.find((g) => g.type === 'daily_actual' && g.active && g.activeToday)?.target ?? null)
   // 앱까지 공개가 아닌 구성원은 타임라인과 사용 구간 대신 시간대와 카테고리 차트를 본다
   const limited = !!detail.data?.level && detail.data.level !== 'app'
 

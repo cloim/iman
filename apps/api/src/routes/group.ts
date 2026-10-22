@@ -76,7 +76,8 @@ export async function buildBoard(
     const goals = await c.query<{ user_id: string; target: number; status: string | null }>(
       `select g.user_id, g.target, r.status from goals g
        left join goal_results r on r.goal_id = g.id and r.local_date = $2
-       where g.user_id = any($1) and g.active and g.type = 'daily_actual'`,
+       where g.user_id = any($1) and g.active and g.type = 'daily_actual'
+         and (g.days_of_week & (1 << (extract(isodow from $2::date)::int - 1))) <> 0`,
       [ids, day],
     )
     const labels = await c.query<{ package_name: string; label: string }>(

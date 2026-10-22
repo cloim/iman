@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api, errorText } from '../lib/api'
+import { availableGoalDays, hasOverlappingGoals } from '../lib/goalSchedules'
 import { CATEGORY_LABEL, type GoalDto, type Today } from '../lib/types'
 import { Modal } from './Modal'
 import SelectControl from './SelectControl'
@@ -97,7 +98,7 @@ function Nudge({ draft, set }: { draft: Draft; set: (d: Draft) => void }) {
 
 /**
  * 내 목표: 종류별 탭에서 여러 목표를 한꺼번에 고치고 저장 한 번으로 반영한다.
- * 하루 사용, 쉬는 시간대, 화면 켜기는 하나씩, 앱별과 카테고리별은 여러 개를 둘 수 있다.
+ * 같은 종류와 대상도 요일 묶음을 나누어 서로 다른 한도와 알림을 둘 수 있다.
  */
 export function GoalsModal({ isOpen, onClose, today }: { isOpen: boolean; onClose: () => void; today?: Today }) {
   const qc = useQueryClient()
@@ -118,10 +119,16 @@ export function GoalsModal({ isOpen, onClose, today }: { isOpen: boolean; onClos
   const update = (d: Draft) => setDrafts((all) => all.map((x) => (x.key === d.key ? d : x)))
   const isOn = (t: GoalType) => ofType(t).some((d) => d.active && (!MULTI.includes(t) || d.scopeRef))
   const apps = Object.entries(today?.apps ?? {}).map(([k, v]) => [k, v.label] as const)
-  const invalid = drafts.some((d) => MULTI.includes(d.type) && !d.scopeRef)
+  const overlapping = hasOverlappingGoals(drafts)
+  const invalid = overlapping || drafts.some((d) =>
+    (MULTI.includes(d.type) && !d.scopeRef) || !Number.isInteger(d.target) ||
+    d.target < (d.type === 'pickups' ? 1 : 0) || d.target > 1440 ||
+    (d.type === 'quiet_hours' && (!d.quietFrom || !d.quietTo)),
+  )
   const dirty = drafts.length !== original.length || drafts.some((d) => !d.id || !same(d, original.find((g) => g.id === d.id)!))
 
   const save = async () => {
+    if (invalid || saving) return
     setSaving(true)
     setError('')
     try {
@@ -138,28 +145,24 @@ export function GoalsModal({ isOpen, onClose, today }: { isOpen: boolean; onClos
       void qc.invalidateQueries({ queryKey: ['goals'] })
       void qc.invalidateQueries({ queryKey: ['today'] })
       void qc.invalidateQueries({ queryKey: ['days'] })
+      void qc.invalidateQueries({ queryKey: ['board'] })
     }
   }
 
-  const single = (t: GoalType) => {
-    const d = ofType(t)[0]
-    const on = !!d?.active
+  const schedule = (t: GoalType, d: Draft) => {
+    const on = d.active
     return (
-      <div className="grid gap-4">
-        <label className="check font-semibold">
-          <input
-            type="checkbox"
-            checked={on}
-            onChange={(e) => {
-              // 저장된 목표는 꺼 두기만 해서 지난 기록을 남기고, 새로 만든 초안은 바로 버린다
-              if (d?.id) update({ ...d, active: e.target.checked })
-              else if (d) setDrafts((all) => all.filter((x) => x.key !== d.key))
-              else setDrafts((all) => [...all, blank(t)])
-            }}
-          />
-          이 목표 쓰기
-        </label>
-        {d && on && (
+      <div key={d.key} className="grid gap-4 rounded-panel border border-line p-3.5">
+        <div className="flex items-center justify-between gap-2">
+          <label className="check font-semibold">
+            <input type="checkbox" checked={on} onChange={(e) => update({ ...d, active: e.target.checked })} />
+            이 요일 설정 쓰기
+          </label>
+          <button type="button" className="icon-btn text-over-ink hover:bg-over/10" aria-label="이 요일 설정 지우기" onClick={() => setDrafts((all) => all.filter((x) => x.key !== d.key))}>
+            <Trash2 size={18} aria-hidden />
+          </button>
+        </div>
+        {on && (
           <>
             {t === 'quiet_hours' && (
               <div className="flex items-center gap-3">
@@ -189,6 +192,21 @@ export function GoalsModal({ isOpen, onClose, today }: { isOpen: boolean; onClos
     )
   }
 
+  const single = (t: GoalType) => {
+    const list = ofType(t)
+    const remaining = availableGoalDays(list)
+    return (
+      <div className="grid gap-3">
+        {list.length === 0 && <p className="text-ink-3">아직 정한 목표가 없어요.</p>}
+        {list.map((d) => schedule(t, d))}
+        <button type="button" className="btn btn-ghost btn-sm justify-self-start" disabled={!remaining} onClick={() => setDrafts((all) => [...all, { ...blank(t), daysOfWeek: remaining }])}>
+          <Plus size={16} aria-hidden /> 요일 설정 추가
+        </button>
+        <p className="text-[13px] text-ink-3">요일을 나누면 한도와 알림을 다르게 정할 수 있어요.</p>
+      </div>
+    )
+  }
+
   const multi = (t: GoalType) => {
     const list = ofType(t)
     const options = t === 'app_limit' ? apps : (Object.entries(CATEGORY_LABEL) as [string, string][])
@@ -196,13 +214,13 @@ export function GoalsModal({ isOpen, onClose, today }: { isOpen: boolean; onClos
       <div className="grid gap-3">
         {list.length === 0 && <p className="text-ink-3">아직 정한 한도가 없어요.</p>}
         {list.map((d) => (
-          <div key={d.key} className="grid grid-cols-[minmax(0,1fr)_96px_auto] items-end gap-2">
+          <div key={d.key} className="grid gap-4 rounded-panel border border-line p-3.5">
+          <div className="grid grid-cols-[minmax(0,1fr)_80px_auto] items-end gap-2">
             <label className="field">
               <span>{t === 'app_limit' ? '앱' : '카테고리'}</span>
               <SelectControl value={d.scopeRef ?? ''} onChange={(e) => update({ ...d, scopeRef: e.target.value || null })}>
                 <option value="">골라 주세요</option>
                 {options
-                  .filter(([k]) => k === d.scopeRef || !list.some((x) => x.scopeRef === k))
                   .map(([k, v]) => (
                     <option key={k} value={k}>
                       {v}
@@ -215,9 +233,12 @@ export function GoalsModal({ isOpen, onClose, today }: { isOpen: boolean; onClos
               <span>한도(분)</span>
               <input type="number" className="input num" min={0} max={1440} step={10} value={d.target} onChange={(e) => update({ ...d, target: Number(e.target.value) })} />
             </label>
-            <button type="button" className="icon-btn mb-0.5" aria-label="이 한도 지우기" onClick={() => setDrafts((all) => all.filter((x) => x.key !== d.key))}>
+            <button type="button" className="icon-btn mb-0.5 text-over-ink hover:bg-over/10" aria-label="이 한도 지우기" onClick={() => setDrafts((all) => all.filter((x) => x.key !== d.key))}>
               <Trash2 size={18} aria-hidden />
             </button>
+          </div>
+          <Days value={d.daysOfWeek} onChange={(v) => update({ ...d, daysOfWeek: v })} />
+          <Nudge draft={d} set={update} />
           </div>
         ))}
         {t === 'app_limit' && apps.length === 0 && <p className="text-[13px] text-ink-3">오늘 쓴 앱이 여기에 나타나요.</p>}
@@ -240,7 +261,7 @@ export function GoalsModal({ isOpen, onClose, today }: { isOpen: boolean; onClos
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
             취소
           </button>
-          <button type="button" className="btn btn-sm" disabled={invalid || !dirty || saving} onClick={save}>
+          <button type="button" className="btn btn-sm" disabled={goals.isPending || goals.isError || invalid || !dirty || saving} onClick={save}>
             {saving ? '저장하는 중' : '저장'}
           </button>
         </>
@@ -265,6 +286,8 @@ export function GoalsModal({ isOpen, onClose, today }: { isOpen: boolean; onClos
         </div>
         <p className="text-[13px] text-ink-3">{current.hint}</p>
         {goals.isPending ? <div className="skeleton h-[180px]" /> : MULTI.includes(tab) ? multi(tab) : single(tab)}
+        {overlapping && <p className="text-[13px] text-over-ink" role="alert">같은 목표의 적용 요일이 겹쳐요. 요일을 나누어 주세요.</p>}
+        {goals.isError && <p className="text-[13px] text-over-ink" role="alert">목표를 불러오지 못했어요. 창을 다시 열어 주세요.</p>}
         {error && (
           <p className="text-[13px] text-over-ink" role="alert">
             {error}
