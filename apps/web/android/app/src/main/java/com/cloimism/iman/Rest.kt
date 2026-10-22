@@ -20,12 +20,24 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-/** "이만, 쉬기": 쉬는 동안 넛지를 멈추고, 끝나면 쉼표 하나를 기록했다고 알려 준다 */
+/** "이만, 쉬기": 쉬는 중 앱 사용을 매 1분 알리고, 끝나면 쉼표 하나를 기록했다고 알려 준다 */
 object Rest {
     const val ONGOING_ID = 2001
     const val DONE_ID = 2002
     private val cancellationLock = Any()
     private val requests = Mutex()
+    internal val stateLock = Any()
+
+    fun notification(ctx: Context): androidx.core.app.NotificationCompat.Builder {
+        val end = Store.restUntil(ctx)
+        val until = SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(end))
+        return Notifications.builder(ctx, Notifications.REST, "쉬는 중이에요. 앱을 사용하면 1분마다 쉬도록 알려 드려요. ${until}까지 쉬어요.")
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setUsesChronometer(true)
+            .setChronometerCountDown(true)
+            .setWhen(end)
+    }
 
     fun cancelPersonal(ctx: Context) {
         if (Store.restPause(ctx) != null) return
@@ -60,20 +72,13 @@ object Rest {
     suspend fun start(ctx: Context, minutes: Int, source: String, pauseId: String? = null) = requests.withLock {
         val start = System.currentTimeMillis()
         val end = start + minutes * 60_000L
-        Store.setRestUntil(ctx, end)
-        Store.setRestPause(ctx, if (source == "group") pauseId else null)
-        Notifications.cancel(ctx, Nudge.NOTIFY_ID)
-        val until = SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(end))
-        Notifications.show(
-            ctx,
-            ONGOING_ID,
-            Notifications.builder(ctx, Notifications.REST, "쉬는 중이에요. ${until}에 알려 드릴게요.")
-                .setOngoing(true)
-                .setAutoCancel(false)
-                .setUsesChronometer(true)
-                .setChronometerCountDown(true)
-                .setWhen(end),
-        )
+        synchronized(stateLock) {
+            Store.setRestUntil(ctx, end)
+            Store.setRestPause(ctx, if (source == "group") pauseId else null)
+            Notifications.cancel(ctx, Nudge.NOTIFY_ID)
+            Notifications.cancel(ctx, RestReminderService.REMINDER_ID)
+            RestReminderService.start(ctx)
+        }
         WorkManager.getInstance(ctx).enqueueUniqueWork(
             "iman-rest-done",
             ExistingWorkPolicy.REPLACE,
@@ -99,14 +104,26 @@ object Rest {
      * 함께 쉬기를 일찍 마쳤을 때 남은 쉬기를 끝낸다.
      * pauseId 를 주면 그 함께 쉬기로 쉬던 중일 때만 끝내서, 혼자 시작한 쉬기는 건드리지 않는다
      */
-    fun end(ctx: Context, pauseId: String?) {
-        if (pauseId != null && Store.restPause(ctx) != pauseId) return
-        if (System.currentTimeMillis() >= Store.restUntil(ctx)) return
+    fun end(ctx: Context, pauseId: String?) = synchronized(stateLock) {
+        if (pauseId != null && Store.restPause(ctx) != pauseId) return@synchronized
+        if (System.currentTimeMillis() >= Store.restUntil(ctx)) return@synchronized
         Store.setRestUntil(ctx, 0L)
         Store.setRestPause(ctx, null)
+        RestReminderService.stop(ctx)
         WorkManager.getInstance(ctx).cancelUniqueWork("iman-rest-done")
         Notifications.cancel(ctx, ONGOING_ID)
         if (pauseId != null) Notifications.show(ctx, DONE_ID, Notifications.builder(ctx, Notifications.REST, "함께 쉬기를 마쳤어요. 오늘의 쉼표 하나를 찍었어요."))
+        Widgets.updateAll(ctx)
+    }
+
+    /** 서비스와 종료 작업 중 먼저 끝나는 쪽만 현재 쉬기를 마무리한다. */
+    fun finish(ctx: Context, expected: Long) = synchronized(stateLock) {
+        if (expected <= 0 || Store.restUntil(ctx) != expected || System.currentTimeMillis() < expected) return@synchronized
+        Store.setRestUntil(ctx, 0L)
+        Store.setRestPause(ctx, null)
+        RestReminderService.stop(ctx)
+        Notifications.cancel(ctx, ONGOING_ID)
+        Notifications.show(ctx, DONE_ID, Notifications.builder(ctx, Notifications.REST, "잘 쉬었어요. 오늘의 쉼표 하나를 찍었어요."))
         Widgets.updateAll(ctx)
     }
 }
@@ -117,11 +134,7 @@ class RestDoneWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         val endsAt = Store.restUntil(ctx)
         val expected = inputData.getLong("endsAt", endsAt)
         if (endsAt <= 0 || endsAt != expected || System.currentTimeMillis() < endsAt) return Result.success()
-        Notifications.cancel(ctx, Rest.ONGOING_ID)
-        Store.setRestUntil(ctx, 0L)
-        Store.setRestPause(ctx, null)
-        Notifications.show(ctx, Rest.DONE_ID, Notifications.builder(ctx, Notifications.REST, "잘 쉬었어요. 오늘의 쉼표 하나를 찍었어요."))
-        Widgets.updateAll(ctx)
+        Rest.finish(ctx, expected)
         return Result.success()
     }
 }
@@ -142,9 +155,9 @@ class ActionReceiver : BroadcastReceiver() {
                         val id = intent.getStringExtra("pauseId") ?: return@launch
                         val endsAt = intent.getLongExtra("endsAt", 0L)
                         Notifications.cancel(ctx, Messaging.PAUSE_ID)
-                        runCatching { Api.request(ctx, "POST", "/api/group/pauses/$id/join") }
                         val minutes = ((endsAt - System.currentTimeMillis()) / 60_000).toInt().coerceAtLeast(1)
                         Rest.start(ctx, minutes, "group", id)
+                        runCatching { Api.request(ctx, "POST", "/api/group/pauses/$id/join") }
                     }
                     REFRESH -> Sync.now(ctx)
                 }

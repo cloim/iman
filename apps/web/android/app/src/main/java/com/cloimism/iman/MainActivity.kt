@@ -11,6 +11,7 @@ class MainActivity : BridgeActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (Store.restUntil(this) > System.currentTimeMillis()) RestReminderService.start(this)
         // 앱을 열 때마다 즉시 동기화
         Sync.now(this)
     }
