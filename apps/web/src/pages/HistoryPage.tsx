@@ -58,7 +58,7 @@ const lastDay = (m: string) => {
 
 function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
   return (
-    <div className="grid content-start gap-0.5">
+    <div className="grid min-w-0 content-start gap-0.5 [overflow-wrap:anywhere]">
       <p className="text-[13px] text-ink-3">{label}</p>
       <p className="font-bold">{value}</p>
       {sub && <p className="text-[13px] text-ink-3">{sub}</p>}
@@ -97,7 +97,7 @@ function WeeklyCard({
   const w = q.data
   const targets = (w?.days ?? []).map((d) => d.goal?.targetMin ?? goalMin)
   return (
-    <section className="card card-tint">
+    <section className="card card-tint min-w-0">
       <h2 className="mb-3 flex items-baseline justify-between gap-3 text-lg">
         주간 쉼표 리포트{' '}
         <span className="text-[13px] text-ink-3">{weekStart.slice(5).replace('-', '.')} 주</span>
@@ -110,7 +110,7 @@ function WeeklyCard({
       ) : q.error || !w ? (
         <p className="text-ink-3">리포트를 불러오지 못했어요.</p>
       ) : (
-        <div className="grid gap-5">
+        <div className="grid grid-cols-1 gap-5">
           <div
             className="h-[168px]"
             role="img"
@@ -350,7 +350,7 @@ export default function HistoryPage() {
   )
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-1 gap-4">
       <BarActions>
         <MemberPicker
           value={member}
@@ -403,7 +403,7 @@ export default function HistoryPage() {
       <WeeklyCard base={base} weekStart={weekStart} tz={tz} today={todayStr} goalMin={goalMin} />
 
       <section className="card">
-        <h2 className="mb-3 flex items-baseline justify-between gap-3 text-lg">
+        <h2 className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-lg">
           {Number(selected.slice(5, 7))}월 {Number(selected.slice(8))}일
           {detail.data && (
             <span className="text-[13px] text-ink-3">
@@ -434,7 +434,7 @@ export default function HistoryPage() {
       </section>
 
       {limited && detail.data && (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-4">
           <HourChart t={detail.data} />
           {detail.data.level === 'category' && <CategoryBars t={detail.data} metric="actual" />}
         </div>
