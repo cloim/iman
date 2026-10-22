@@ -12,7 +12,7 @@ function HourBars({ byHour, c }: { byHour: number[]; c: ChartColors }) {
   // 쓰지 않은 시간도 얇은 바닥 막대로 그려 하루 24칸의 흐름이 보이게 한다
   const floor = Math.max(1, ...byHour) * 0.08
   return (
-    <div className="relative mt-1 h-[26px] w-full min-w-0" role="img" aria-label="시간대별 사용">
+    <div className="relative h-[26px] w-full min-w-0" role="img" aria-label="시간대별 사용">
       <Bar
         data={{ labels: byHour.map((_, h) => h), datasets: [{ data: byHour.map((v) => v || floor), backgroundColor: byHour.map((v) => (v ? c.comma : `color-mix(in srgb, ${c['ink-3']} 30%, transparent)`)), borderRadius: 1, categoryPercentage: 1, barPercentage: 0.8 }] }}
         options={{
@@ -73,11 +73,11 @@ export function GroupSentence({
         return (
           <li
             key={m.userId}
-            className={`grid grid-cols-[minmax(0,1fr)] justify-items-center gap-1 rounded-card text-center ${live ? 'shadow-[0_0_0_2px_var(--now)]' : 'shadow-[0_0_0_1px_var(--line)]'} ${
-              lg ? 'w-[196px] bg-surface/80 px-4 pt-[22px] pb-[18px]' : 'bg-surface px-4 pt-4 pb-3.5'
+            className={`grid min-w-0 grid-cols-[minmax(0,1fr)] justify-items-center gap-1 rounded-card text-center ${live ? 'shadow-[0_0_0_2px_var(--now)]' : 'shadow-[0_0_0_1px_var(--line)]'} ${
+              lg ? 'w-[196px] grid-rows-[24px_96px_20px_34px_20px_20px_30px_68px] bg-surface/80 px-4 py-5' : 'grid-rows-[24px_76px_16px_24px_16px_16px_30px_56px] bg-surface px-4 py-4'
             }`}
           >
-            <div className="flex max-w-full items-center gap-1.5">
+            <div className="flex min-w-0 max-w-full items-center gap-1.5">
               {m.avatarUrl ? (
                 <img src={m.avatarUrl} alt="" className="size-6 flex-none rounded-full object-cover" referrerPolicy="no-referrer" />
               ) : (
@@ -93,16 +93,20 @@ export function GroupSentence({
               label={`${m.name} ${METRIC_LABEL[metric]} ${formatDuration(value)}`}
             />
             <p className={`${small} text-ink-3`}>{METRIC_LABEL[metric]}</p>
-            <p className={`num leading-[1.1] ${lg ? 'text-3xl' : 'text-xl'}`}>{formatDuration(value)}</p>
+            <p className={`num whitespace-nowrap leading-[1.1] ${lg ? 'text-3xl' : 'text-lg'}`}>{formatDuration(value)}</p>
             <p className={`${small} font-semibold ${live ? 'text-[#3a86b5]' : 'text-comma-deep'}`}>{state}</p>
-            {m.goal && <p className={`${small} text-ink-3`}>목표 {formatDuration(m.goal.targetMin * 60_000)}</p>}
-            {showHours && m.byHour.length > 0 && <HourBars byHour={m.byHour} c={c} />}
-            {details.map((x) => (
-              <p key={x.key} className={`flex w-full justify-between gap-1.5 ${small} text-ink-2`}>
-                <span className="truncate">{m.apps ? x.label : (CATEGORY_LABEL[x.key] ?? x.key)}</span>
-                <span className="num">{formatDuration(pick(x))}</span>
-              </p>
-            ))}
+            <p className={`${small} text-ink-3`}>{m.goal ? `목표 ${formatDuration(m.goal.targetMin * 60_000)}` : '목표 없음'}</p>
+            <div className="flex w-full min-w-0 items-center">
+              {showHours && m.byHour.some((v) => v > 0) && <HourBars byHour={m.byHour} c={c} />}
+            </div>
+            <div className="grid w-full min-w-0 grid-rows-3 gap-1 self-stretch">
+              {details.map((x) => (
+                <p key={x.key} className={`flex min-w-0 w-full justify-between gap-1.5 ${small} text-ink-2`}>
+                  <span className="min-w-0 truncate">{m.apps ? x.label : (CATEGORY_LABEL[x.key] ?? x.key)}</span>
+                  <span className="num shrink-0 whitespace-nowrap">{formatDuration(pick(x))}</span>
+                </p>
+              ))}
+            </div>
           </li>
         )
       })}
