@@ -24,11 +24,20 @@
 ```powershell
 pnpm install
 pnpm --filter @iman/api dev      # 127.0.0.1:47211, apps/api/.env.local (DB: iman_dev, DEV_LOGIN=1)
-pnpm --filter @iman/web dev      # http://localhost:5173 (API 프록시)
+pnpm --filter @iman/web dev      # http://localhost:47212 (API 프록시)
 pnpm --filter @iman/api exec tsx scripts/seed-dev.ts   # 데모 그룹과 14일 기록
 pnpm test                        # core 단위, API 통합(iman_test DB 자동 생성)
 cd apps/web/android; ./gradlew testDebugUnitTest assembleDebug
 ```
+
+### 서비스 구성
+
+- **운영 환경**:
+  - `DB`: Docker 컨테이너 (`iman-postgres`, 포트 47200)
+  - `API`: Docker 컨테이너 (`iman-api`, 포트 47210, 웹 빌드 서빙 및 Fastify API, `https://iman.example.com` 연결)
+- **개발 환경**:
+  - `API`: 개발 API 포트 `47211` (`pnpm dev`, `apps/api`, 개발용 DB `iman_dev` 연결)
+  - `Web`: 개발 화면 포트 `47212` (`pnpm dev`, `apps/web`, Vite HMR 지원 및 `http://localhost:47212`)
 
 에뮬레이터 개발 빌드는 `VITE_API_BASE=http://localhost:47211`, `IMAN_DEV=1`, `IMAN_API_BASE=http://localhost:47211`로 빌드하고 `adb reverse tcp:47211 tcp:47211`을 연결합니다. 디버그 빌드는 구글 클라이언트 ID가 없으면 개발 로그인을 씁니다.
 
