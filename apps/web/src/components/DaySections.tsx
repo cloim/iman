@@ -49,7 +49,6 @@ export function Hero({
       )}
       <CommaGauge
         ratio={ratio}
-        over={status === 'over'}
         active={t.activeNow}
         size={132}
         label={

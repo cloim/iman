@@ -80,23 +80,23 @@ function Liquid({ fill, color, animate, clip }: { fill: number; color: string; a
 }
 
 /**
- * 쉼표 게이지: 사용량만큼 꼬리부터 머리까지 쉼표 전체를 채운다.
- * 목표를 넘기면 가득 찬 채로 색만 붉어지고, 넘긴 시간이 길수록 더 붉다.
+ * 쉼표 게이지: 남은 사용량만큼 민트를 채우고 목표에 도달하면 비운다.
+ * 목표를 넘기면 초과 비율만큼 붉게 채운다. 목표의 2배에서 가득 찬다.
  */
 export function CommaGauge({
   ratio,
-  over = false,
   active = false,
   size = 160,
   label,
 }: {
   ratio: number
-  over?: boolean
   active?: boolean
   size?: number
   label: string
 }) {
   const id = `c${useId().replace(/:/g, '')}`
+  const over = ratio > 1
+  const fill = Math.max(0, Math.min(1, over ? ratio - 1 : 1 - ratio))
   const color = over ? overColor(ratio - 1) : 'var(--comma)'
   return (
     <svg viewBox={GAUGE_VIEWBOX} width={size} height={(size * 82) / 76} role="img" aria-label={label} className="block overflow-visible">
@@ -106,7 +106,7 @@ export function CommaGauge({
         </clipPath>
       </defs>
       <path d={COMMA_PATH} fill="var(--comma-tint)" />
-      <Liquid fill={over ? 1 : Math.max(0, Math.min(1, ratio))} color={color} animate clip={id} />
+      <Liquid fill={fill} color={color} animate clip={id} />
       {active && (
         // 점 중심(64, 70)을 원점으로 옮겨 제자리에서 숨 쉬게 한다. CSS 애니메이션은 동작 줄이기 설정과 WebView에서 멈춰 SMIL을 쓴다
         <g transform="translate(64 70)">
@@ -122,8 +122,10 @@ export function CommaGauge({
 }
 
 /** 캘린더용 작은 쉼표 도장. 게이지와 같은 규칙으로 채우고 물결은 멈춰 있다 */
-export function CommaStamp({ ratio, over = false, empty = false, size = 24 }: { ratio: number; over?: boolean; empty?: boolean; size?: number }) {
+export function CommaStamp({ ratio, empty = false, size = 24 }: { ratio: number; empty?: boolean; size?: number }) {
   const id = `s${useId().replace(/:/g, '')}`
+  const over = ratio > 1
+  const fill = Math.max(0, Math.min(1, over ? ratio - 1 : 1 - ratio))
   return (
     <svg viewBox={COMMA_VIEWBOX} width={size} height={(size * 81) / 56} aria-hidden className="overflow-visible">
       {empty ? (
@@ -136,7 +138,7 @@ export function CommaStamp({ ratio, over = false, empty = false, size = 24 }: { 
             </clipPath>
           </defs>
           <path d={COMMA_PATH} fill="var(--comma-tint)" />
-          <Liquid fill={over ? 1 : Math.max(0, Math.min(1, ratio))} color={over ? overColor(ratio - 1) : 'var(--comma)'} animate={false} clip={id} />
+          <Liquid fill={fill} color={over ? overColor(ratio - 1) : 'var(--comma)'} animate={false} clip={id} />
         </>
       )}
     </svg>

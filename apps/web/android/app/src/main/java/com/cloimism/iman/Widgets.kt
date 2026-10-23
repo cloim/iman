@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.widget.RemoteViews
 import androidx.core.graphics.PathParser
@@ -19,7 +20,7 @@ import org.json.JSONObject
 object CommaRenderer {
     private const val COMMA = "m31.69 0.5c35.39 3.4 30.84 64.37-7.44 77.91-4.76 1.68-14.76 4.57-15.86-2.57-1.06-6.91 9.9-8.66 13.25-15.97 1.5-3.29 1.79-8.57-1.84-10.9-30.7-5.8-22.36-51.76 11.89-48.47z"
     private const val DOT = "M70.25 78.89C58.08 86.44 47.83 70.65 56.77 62.79 68.33 52.63 81.53 71.88 70.25 78.89Z"
-    // 오늘 카드처럼 쉼표 전체를 꼬리부터 채운다. 행별 넓이로 수면 높이를 구한다.
+    // 남은 양 또는 목표 초과분을 물결 수면으로 채운다. 행별 넓이로 수면 높이를 구한다.
     private val fillLevels by lazy {
         val region = android.graphics.Region().apply {
             setPath(PathParser.createPathFromPathData(COMMA), android.graphics.Region(0, 0, 56, 82))
@@ -31,7 +32,7 @@ object CommaRenderer {
         }
     }
 
-    fun gauge(sizePx: Int, ratio: Double, status: String, active: Boolean, night: Boolean): Bitmap {
+    fun gauge(sizePx: Int, ratio: Double, active: Boolean, night: Boolean): Bitmap {
         val w = sizePx
         val h = (sizePx * 82f / 76f).toInt()
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -39,21 +40,35 @@ object CommaRenderer {
         c.scale(w / 76f, h / 82f)
         val comma = PathParser.createPathFromPathData(COMMA)
         c.drawPath(comma, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (night) 0xFF2B3A33.toInt() else 0xFFE3EEE4.toInt() })
+        val over = ratio > 1
+        val amount = (if (over) ratio - 1 else 1 - ratio).coerceIn(0.0, 1.0)
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = when (status) {
-                "over" -> 0xFFE98E7A.toInt()
-                else -> 0xFF7EC3A8.toInt()
-            }
+            color = if (over) ColorUtils.blendARGB(0xFFE98E7A.toInt(), 0xFFC63C2F.toInt(), (ratio - 1).coerceIn(0.0, 1.0).toFloat())
+                else 0xFF7EC3A8.toInt()
         }
         c.save()
         c.clipPath(comma)
-        if (ratio > 0) {
-            val area = ratio.coerceIn(0.0, 1.0) * fillLevels.last()
+        if (amount > 0) {
+            val area = amount * fillLevels.last()
             val row = fillLevels.indexOfFirst { it >= area }.coerceAtLeast(1)
             val previous = fillLevels[row - 1]
             val fraction = if (fillLevels[row] > previous) (area - previous) / (fillLevels[row] - previous) else 0.0
-            val y = if (ratio >= 1) 0f else (80 - row - fraction).toFloat()
-            c.drawRect(RectF(0f, y, 60f, 82f), fill)
+            val y = if (amount >= 1) -3f else (80 - row - fraction).toFloat()
+            val amplitude = if (amount >= 1) 0f else 1.6f
+            fun wave(surface: Float) = Path().apply {
+                moveTo(-28f, surface)
+                for (x in -28 until 70 step 14) {
+                    quadTo(x + 3.5f, surface - amplitude, x + 7f, surface)
+                    quadTo(x + 10.5f, surface + amplitude, x + 14f, surface)
+                }
+                lineTo(84f, 90f)
+                lineTo(-28f, 90f)
+                close()
+            }
+            fill.alpha = 115
+            c.drawPath(wave(y - 0.8f), fill)
+            fill.alpha = 255
+            c.drawPath(wave(y), fill)
         }
         c.restore()
         if (active) c.drawPath(PathParser.createPathFromPathData(DOT), Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF87C6EC.toInt() })
@@ -98,7 +113,7 @@ object Widgets {
             if (today == null || !Api.signedIn(ctx)) {
                 v.setTextViewText(R.id.widget_value, "로그인")
                 v.setTextViewText(R.id.widget_sub, "앱을 열어 시작해요")
-                v.setImageViewBitmap(R.id.widget_gauge, CommaRenderer.gauge((56 * density).toInt(), 0.0, "met", false, dark))
+                v.setImageViewBitmap(R.id.widget_gauge, CommaRenderer.gauge((56 * density).toInt(), 0.0, false, dark))
                 mgr.updateAppWidget(id, v)
                 continue
             }
@@ -120,7 +135,7 @@ object Widgets {
             val active = today.optBoolean("activeNow") && !resting
             v.setImageViewBitmap(
                 R.id.widget_gauge,
-                CommaRenderer.gauge(((if (medium) 88 else 56) * density).toInt(), actual.toDouble() / target, status, active, dark),
+                CommaRenderer.gauge(((if (medium) 88 else 56) * density).toInt(), actual.toDouble() / target, active, dark),
             )
             v.setTextViewText(R.id.widget_value, Nudge.formatDuration(actual).let { if (actual < 60_000) "0분" else it })
             v.setTextViewText(

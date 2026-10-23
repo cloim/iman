@@ -395,8 +395,7 @@ export default function HistoryPage() {
           />
         )}
         <p className="text-[13px] text-ink-3 mt-2">
-          사용량에 따라 쉼표가 채워 표시되고 목표를 넘긴 시간에 따라 붉어져요. 쉼표가 클수록 많이 쓴
-          날이에요.
+          사용할수록 민트 채움이 줄고, 목표를 넘긴 만큼 붉게 채워져요. 쉼표 크기는 일정해요.
         </p>
       </section>
 

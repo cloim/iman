@@ -87,7 +87,6 @@ export function GroupSentence({
             </div>
             <CommaGauge
               ratio={value / target}
-              over={!!m.goal && value > target}
               active={live}
               size={lg ? 96 : 76}
               label={`${m.name} ${METRIC_LABEL[metric]} ${formatDuration(value)}`}
