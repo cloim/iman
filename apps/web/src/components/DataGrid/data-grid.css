@@ -8,6 +8,10 @@
 
 /* AG Grid 컨테이너 자체는 남은 영역을 모두 채움 */
 .data-grid .ag-root-wrapper {
+  /* 행 구분선은 AG Grid가 한 번만 그린다. */
+  --ag-row-border-style: solid;
+  --ag-row-border-width: 1px;
+  --ag-row-border-color: var(--line);
   flex: 1;
   min-height: 0;
   border: 0;
@@ -59,7 +63,6 @@
    않는다. height를 !important로 고정하면 rowHeight를 다르게 준 화면에서 AG Grid의 실제
    배치와 CSS 높이가 어긋나 행 사이에 틈이 생긴다. */
 .data-grid .ag-row {
-  border-bottom: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink);
   cursor: pointer;
@@ -128,9 +131,12 @@
 /* 포커스 링 등 AG Grid 기본 장식 제거하여 기존 모양 유지 */
 .data-grid .ag-cell:focus,
 .data-grid .ag-cell:focus-within,
-.data-grid .ag-cell-focus,
-.data-grid .ag-row-focus {
+.data-grid .ag-cell-focus {
   border: none !important;
+  outline: none !important;
+}
+
+.data-grid .ag-row-focus {
   outline: none !important;
 }
 
