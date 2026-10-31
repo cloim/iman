@@ -187,11 +187,15 @@ function WeeklyCard({
                     ...tooltipStyle(c),
                     callbacks: {
                       title: (items) => {
-                        const d = w.days[items[0]!.dataIndex]!
+                        const item = items[0]
+                        if (!item) return ''
+                        const d = w.days[item.dataIndex]
+                        if (!d) return ''
                         return `${Number(d.date.slice(5, 7))}월 ${Number(d.date.slice(8))}일 ${WEEKDAY[weekdayOf(d.date)]}요일`
                       },
                       label: (item) => {
-                        const d = w.days[item.dataIndex]!
+                        const d = item ? w.days[item.dataIndex] : undefined
+                        if (!d) return ''
                         if (item.datasetIndex === 1)
                           return `하루 목표 ${formatDuration(targets[item.dataIndex]! * 60_000)}`
                         const out = [`실제 사용 ${formatDuration(d.actualMs)}`]

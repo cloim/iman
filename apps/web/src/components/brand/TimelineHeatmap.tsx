@@ -13,7 +13,7 @@ const GAP = 3
 const PITCH = CELL + GAP
 const ROW = PITCH
 
-interface Cell {
+export interface TimelineCell {
   x: number
   y: number
   /** 그 칸에서 쓴 시간(ms) */
@@ -24,8 +24,50 @@ interface Cell {
   resting: boolean
 }
 
-const fmtTime = (ms: number, tz: string) =>
-  new Intl.DateTimeFormat('ko-KR', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(ms)
+type Cell = TimelineCell
+
+export function createTimelineTooltipOptions(
+  dayStart: number,
+  dayEnd: number,
+  timeZone: string,
+  rows: string[],
+  devices: { id: string; name: string }[],
+) {
+  return {
+    enabled: false,
+    external: htmlTooltip,
+    filter: (item: TooltipItem<'matrix'>) => {
+      const d = item?.raw as TimelineCell | undefined
+      return !!d && (d.v > 0 || d.resting)
+    },
+    callbacks: {
+      title: (items: TooltipItem<'matrix'>[]) => {
+        const d = items[0]?.raw as TimelineCell | undefined
+        if (!d) return ''
+        const s = dayStart + d.x * SLOT_MS
+        return `${rows[d.y]} ${fmtTime(s, timeZone)} ~ ${fmtTime(Math.min(dayEnd, s + SLOT_MS), timeZone)}`
+      },
+      label: (item: TooltipItem<'matrix'>) => {
+        const d = item?.raw as TimelineCell | undefined
+        if (!d) return []
+        const out = [`사용 ${formatDuration(d.v)}`]
+        if (d.concurrentMs > 0) {
+          out.push(`동시 실행 ${formatDuration(d.concurrentMs)}`)
+          if (d.partners.length) out.push(`함께 띄운 앱 ${d.partners.join(', ')}`)
+        }
+        if (devices.length > 1 && d.devices.length) out.push(`기기 ${d.devices.join(', ')}`)
+        if (d.resting) out.push('쉬는 시간 포함')
+        return out
+      },
+    },
+  }
+}
+
+function fmtTime(ms: number, tz: string) {
+  return new Intl.DateTimeFormat('ko-KR', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(ms)
+}
+
+
 
 /**
  * 타임라인 히트맵: 맨 윗줄은 실제 사용(합집합), 아래는 많이 쓴 앱별 줄.
@@ -137,7 +179,8 @@ export function TimelineHeatmap({
 
   const colorOf = (r: number) => (r === 0 ? c.ink : APP_PALETTE[(r - 1) % APP_PALETTE.length]!)
   const fill = (ctx: ScriptableContext<'matrix'>) => {
-    const d = ctx.raw as Cell
+    const d = ctx.raw as Cell | undefined
+    if (!d) return c['surface-2']
     if (d.v === 0) return d.resting && d.y === 0 ? c['comma-tint'] : c['surface-2']
     const strength = 0.3 + 0.7 * Math.min(1, d.v / SLOT_MS)
     return `color-mix(in srgb, ${colorOf(d.y)} ${Math.round(strength * 100)}%, ${c.surface})`
@@ -188,8 +231,8 @@ export function TimelineHeatmap({
                       {
                         data: cells,
                         backgroundColor: fill,
-                        borderColor: (ctx) => ((ctx.raw as Cell).concurrentMs > 0 ? c.now : 'transparent'),
-                        borderWidth: (ctx) => ((ctx.raw as Cell).concurrentMs > 0 ? 1.5 : 0),
+                        borderColor: (ctx) => (((ctx.raw as Cell | undefined)?.concurrentMs ?? 0) > 0 ? c.now : 'transparent'),
+                        borderWidth: (ctx) => (((ctx.raw as Cell | undefined)?.concurrentMs ?? 0) > 0 ? 1.5 : 0),
                         borderRadius: 3,
                         width: CELL,
                         height: CELL,
@@ -208,29 +251,7 @@ export function TimelineHeatmap({
                     plugins: {
                       legend: { display: false },
                       // 칸 줄이 낮고 가로로 스크롤돼 캔버스 안 툴팁은 잘리므로 문서 위 HTML 상자로 띄운다
-                      tooltip: {
-                        enabled: false,
-                        external: htmlTooltip,
-                        filter: (item: TooltipItem<'matrix'>) => (item.raw as Cell).v > 0 || (item.raw as Cell).resting,
-                        callbacks: {
-                          title: (items: TooltipItem<'matrix'>[]) => {
-                            const d = items[0]!.raw as Cell
-                            const s = dayStart + d.x * SLOT_MS
-                            return `${rows[d.y]} ${fmtTime(s, timeZone)} ~ ${fmtTime(Math.min(dayEnd, s + SLOT_MS), timeZone)}`
-                          },
-                          label: (item: TooltipItem<'matrix'>) => {
-                            const d = item.raw as Cell
-                            const out = [`사용 ${formatDuration(d.v)}`]
-                            if (d.concurrentMs > 0) {
-                              out.push(`동시 실행 ${formatDuration(d.concurrentMs)}`)
-                              if (d.partners.length) out.push(`함께 띄운 앱 ${d.partners.join(', ')}`)
-                            }
-                            if (devices.length > 1 && d.devices.length) out.push(`기기 ${d.devices.join(', ')}`)
-                            if (d.resting) out.push('쉬는 시간 포함')
-                            return out
-                          },
-                        },
-                      },
+                      tooltip: createTimelineTooltipOptions(dayStart, dayEnd, timeZone, rows, devices),
                     },
                   }}
                 />

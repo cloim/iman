@@ -297,8 +297,8 @@ export function HourChart({ t }: { t: Today }) {
               tooltip: {
                 ...tooltipStyle(c),
                 callbacks: {
-                  title: (items) => `${items[0]!.dataIndex}시`,
-                  label: (item) => `실제 사용 ${formatDuration(hours[item.dataIndex]!)}`,
+                  title: (items) => (items[0] ? `${items[0].dataIndex}시` : ''),
+                  label: (item) => (item && hours[item.dataIndex] != null ? `실제 사용 ${formatDuration(hours[item.dataIndex]!)}` : ''),
                 },
               },
             },

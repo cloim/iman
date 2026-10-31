@@ -70,13 +70,15 @@ export function htmlTooltip({ chart, tooltip }: { chart: Chart; tooltip: { opaci
     // 툴팁은 화면 고정 위치라 어떤 영역이든 스크롤하면 숨긴다
     window.addEventListener('scroll', hideHtmlTooltip, { capture: true, passive: true })
   }
-  if (tooltip.opacity === 0) {
+  const validTitles = (tooltip.title ?? []).filter((t) => t && t.trim().length > 0)
+  const validBodies = (tooltip.body ?? []).flatMap((b) => b.lines).filter((l) => l && l.trim().length > 0)
+  if (tooltip.opacity === 0 || (!validTitles.length && !validBodies.length)) {
     el.style.opacity = '0'
     return
   }
   el.replaceChildren(
-    ...tooltip.title.map((t) => Object.assign(document.createElement('strong'), { textContent: t, className: 'block' })),
-    ...tooltip.body.flatMap((b) => b.lines).map((l) => Object.assign(document.createElement('span'), { textContent: l, className: 'block' })),
+    ...validTitles.map((t) => Object.assign(document.createElement('strong'), { textContent: t, className: 'block' })),
+    ...validBodies.map((l) => Object.assign(document.createElement('span'), { textContent: l, className: 'block' })),
   )
   const r = chart.canvas.getBoundingClientRect()
   el.style.opacity = '1'

@@ -25,7 +25,7 @@ function HourBars({ byHour, c }: { byHour: number[]; c: ChartColors }) {
             tooltip: {
               enabled: false,
               external: htmlTooltip,
-              callbacks: { title: (items) => `${items[0]!.dataIndex}시`, label: (item) => `실제 사용 ${formatDuration(byHour[item.dataIndex]!)}` },
+              callbacks: { title: (items) => (items[0] ? `${items[0].dataIndex}시` : ''), label: (item) => (item && byHour[item.dataIndex] != null ? `실제 사용 ${formatDuration(byHour[item.dataIndex]!)}` : '') },
             },
           },
         }}
