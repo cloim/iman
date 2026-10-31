@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react'
-import { createBrowserRouter, Navigate, useLocation, useSearchParams } from 'react-router'
+import { createBrowserRouter, Navigate, useLocation, useRouteError, useSearchParams } from 'react-router'
 import { AppShell } from './components/AppShell'
 import { ApiError } from './lib/api'
 import { useMe } from './lib/queries'
@@ -41,6 +41,25 @@ function ToSettings({ tab }: { tab: string }) {
   return <Navigate to={`/me/settings?${params}`} replace />
 }
 
+function RouteError() {
+  const error = useRouteError()
+  return (
+    <div className="empty min-h-[40vh]">
+      <p className="font-semibold text-ink">화면을 불러오는 중에 문제가 발생했어요.</p>
+      <p className="text-sm text-ink-3">
+        {error instanceof Error ? error.message : '잠시 후 다시 시도해 주세요.'}
+      </p>
+      <button
+        type="button"
+        className="btn btn-sm btn-ghost mt-2"
+        onClick={() => window.location.reload()}
+      >
+        새로고침
+      </button>
+    </div>
+  )
+}
+
 export const router = createBrowserRouter([
   { path: '/login', element: <Page><LoginPage /></Page> },
   { path: '/pair', element: <Page><PairPage /></Page> },
@@ -52,6 +71,7 @@ export const router = createBrowserRouter([
   { path: '/board/:dashboardId', element: <Page><BoardPage /></Page> },
   {
     element: <Guard><AppShell /></Guard>,
+    errorElement: <RouteError />,
     children: [
       { path: '/me', element: <Page><TodayPage /></Page> },
       { path: '/me/history', element: <Page><HistoryPage /></Page> },
